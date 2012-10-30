@@ -1,0 +1,93 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+   <meta HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf8">
+   <link rel="stylesheet" type="text/css" href="white.css">
+   <title>Laboratorium MRJP - projekt zaliczeniowy</title>
+<style type="text/css">
+</style>
+</head>
+<body>
+<h1>Laboratorium MRJP - projekt zaliczeniowy</h1>
+<p>
+Zaliczenie laboratorium odbywa się na podstawie projektu obejmującego 
+implementację kompilatora dla prostego jezyka imperatywnego <a href="Latte/">Latte</a>. 
+</p>
+<h2>Etapy</h2>
+<p>Projekt składa się z trzech etapów</p>
+<ol>
+<li>Front-end: analiza składniowa i semantyczna. Termin 18 listopada.</li>
+<li>Generator kodu dla JVM. Termin 16 grudnia.</li>
+<li>Generator kodu dla LLVM albo x86 oraz ewentualne rozszerzenia. Termin 20 stycznia.</li>
+</ol>
+Prowadzący grupę może wyznaczyć inne terminy, w szczególności wymagać osobistej prezentacji projektu. 
+<h3>Punktacja</h3>
+<p>
+Łącznie do zdobycia jest maksymalnie 30 punktów, które liczą się do ostatecznej oceny z przedmiotu. Dla zaliczenia laboratorium (i dopuszczenia do egzaminu) należy oddać zadowalające implementacje wszystkich etapów i uzyskać łącznie co najmniej 15p.
+</p>
+<p>
+Punkty mozna uzyskać za:
+<ol>
+<li>front-end (4)
+<li>dodatkowo do 2 punktów, jesli parser jest napisany bez użycia generatora
+<li>back-end JVM (5)
+<li>back-end LLVM (8) <b>albo</b> x86 (10)
+<li>kod LLVM w postaci SSA - dodatkowo 1p
+<li>alokacja rejestrów dla x86 - dodatkowo do 3p
+<li>optymalizacje - do 3p
+<li>Rozszerzenia (notacja x/y oznacza punkty za backend w wersji odpowiednio LLVM/x86)
+<ol>
+<li>tablice (2)
+<li>struktury (2)
+<li>obiekty (atrybuty, metody, dziedziczenie bez zastępowania metod)
+- dodatkowo (3/4)
+<li>metody wirtualne - dodatkowo (3/4), czyli za obiekty z metodami wirtualnymi mozna uzyskać 8/10 punktów.
+<li> odśmiecanie (2)
+</ol>
+</ol>
+Szczegółowy opis rozszerzeń zawarty jest w opisie języka.
+<p>
+<b>Uwaga:</b> punktacja trzeciego etapu może ulegać jeszcze korektom do czasu jego rozpoczęcia.
+<h3>Spóźnienia, termin poprawkowy</h3>
+<p>
+Programy oddane po terminie będą obciążane karą 2p za każdy (rozpoczęty) tydzień opóźnienia. Ostatecznym terminem, po którym programy nie będą przyjmowane ("termin poprawkowy") jest 22 lutego.
+</p>
+
+
+<h2>Zasady</h2>
+Projekt zaliczeniowy ma być pisany samodzielnie. 
+Wszelkie przejawy niesamodzielności będą karane. W szczególności:
+
+<ul>
+<li>nie wolno oglądać kodu innych studentów, pokazywać, 
+ani w jakikolwiek sposób udostępniać swojego kodu</li>
+<li>wszelkie zapożyczenia powinny być opisane z podaniem źródła.
+</li>
+</ul>
+<h3>Wymagania techniczne</h3>
+<ol>
+<li>Projekt powinien być oddany w postaci spakowanego archiwum TAR (.tar.gz lub .tgz)
+<li>W korzeniu projektu muszą się znajdować co najmniej:
+<ul>
+<li>Plik tekstowy <b>README</b> opisujący szczegóły kompilacji i uruchamiania programu, używane narzędzia i biblioteki, zaimplementowane rozszerzenia, strukturę katalogów projektu, ewentualnie odnośniki do bardziej szczegółowej dokumentacji.
+<li>Plik <b>Makefile</b> pozwalający na zbudowanie programu. 
+<li>katalog <b>src</b> zawierający wyłącznie pliki źródłowe projektu (plus ewentualnie dostarczony przez nas plik Latte.cf); pliki pomocnicze takie jak biblioteki itp powinny być umieszczone w inych katalogach.
+</ul>
+<li>Program musi się kompilować na students poleceniem <b>make</b> (które oczywiście może wywoływać inne programy).
+<li>Wszelkie używane biblioteki (poza biblioteką standardową używanego jezyka programowania) muszą być opisane w README
+<li>Po zbudowaniu kompilatora, w korzeniu musi się znajdować plik wykonywalny o nazwie <b>latc</b> (może być skryptem uruchamiającym inne programy)
+<li>Kompilator musi akceptować wszystkie programy testowe z katalogu <b>good</b> 
+i&nbsp;odrzucać ze stosownym komunikatem wszystkie programy z katalogu <b>bad</b>. Dla rozszerzeń musi akceptować wszystkie programy z odpowiednich podkatalogów <b>extension</b>. Uruchomienie poprawnego programu testowego ma dawać wyjście takie jak w odpowiednim pliku <b>.output</b> (dla wejścia zawartego w odpowiednim pliku .input, o ile istnieje)
+<li>Gdy kompilator akceptuje program, musi wypisać w pierwszej linii stderr napis OK (<tt>"OK\n"</tt>). Dalsze linie i stdout - dowolne. Kompilator musi się w takiej sytuacji zakończyć z kodem powrotu 0.
+<li>Gdy kompilator odrzuca program  musi wypisać w pierwszej linii stderr napis
+ERROR (<tt>"ERROR\n"</tt>). Dalsze linie powinny zawierać stosowne informacje o błędach.
+Kompilator musi się w takiej sytuacji zakończyć z kodem powrotu różnym od 0.
+</ol>
+<p>
+Szczegółowe wymagania dotyczące generowanego kodu pojawią się wkrótce.
+<p>
+Archiwum z programami testowymi:
+<p>
+<a href="Latte/lattests121017.tgz">lattests121017.tgz</a> z 17.10.2012, 
+MD5:49ca5702ca9795fb8f33d52b0b3c6fc3
+</body></html>
