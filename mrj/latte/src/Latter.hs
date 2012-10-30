@@ -14,7 +14,11 @@ compileFile path = do
         Left err -> do
             hPutStrLn stderr $ "Nie mozna otworzyc pliku: " ++ path
             exitFailure
-        Right content -> print $ show $ parse content
+        Right content -> case parseLatte path content of
+            Left err -> do
+                hPutStrLn stderr $ show err
+                exitFailure
+            Right lt -> do putStrLn $ show lt
 
 main = do
     args <- getArgs
@@ -25,5 +29,3 @@ main = do
             hPutStrLn stderr $ "Nieprawidlowe wywolanie programu. Oczekiwano:\n"
                 ++ progName ++ " [plik zrodlowy]"
             exitFailure
-
-            
