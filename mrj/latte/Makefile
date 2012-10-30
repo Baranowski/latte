@@ -1,8 +1,10 @@
+SOURCES = src/*
+
 all: latc
 
-latc:
+latc: $(SOURCES)
 	mkdir -p build
-	ghc --make src/Latter.hs -outputdir build -tmpdir build -o latc
+	ghc --make src/Latter.hs -isrc/ -outputdir build -tmpdir build -o latc
 
 clean:
 	rm -f build/*
