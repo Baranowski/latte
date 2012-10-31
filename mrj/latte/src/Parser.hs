@@ -8,23 +8,37 @@ import LatteAbs
 
 type LtParser st res = GenParser Char st res
 
+mylex :: LtParser st a -> LtParser st a
+mylex p = do
+    result <- p
+    spaces
+    many (comment >> spaces)
+    return result
+
+comment :: LtParser st ()
+comment = do
+     do try (string "#" <|> string "//")
+        anyChar `manyTill` (char '\n')
+        return ()
+    <|> do
+        string "/*"
+        anyChar `manyTill` (try $ string "*/")
+        return ()
+
 topParser :: LtParser st LatteTree
 topParser = do
     spaces
-    funL <- funParser `sepBy` (many1 space)
-    spaces
+    funL <- mylex $ many funParser
+    eof
     return $ LtTop funL
 
 funParser :: LtParser st LatteFun
 funParser = do
-    resT <- typeParser
-    spaces
-    name <- idParser
-    spaces
-    argL <- between (char '(' >> spaces) (char ')' >> spaces)
+    resT <- mylex $ typeParser
+    name <- mylex $ idParser
+    argL <- mylex $ between (char '(' >> spaces) (char ')' >> spaces)
 	(argParser `sepBy` (spaces >> (char ',') >> spaces))
-    spaces
-    body <- blockParser
+    body <- mylex $ blockParser
     return $ LtFun name resT argL body
 
 typeParser :: LtParser st LatteType
@@ -51,8 +65,7 @@ blockParser = do
 
 argParser :: LtParser st LatteArg
 argParser = do
-    t <- typeParser
-    spaces
+    t <- mylex $ typeParser
     name <- idParser
     return $ LtArg name t
 
