@@ -55,13 +55,88 @@ idParser = do
     others <- many (oneOf $ ['a'..'z'] ++ ['A'..'Z'] ++ "_" ++ ['0'..'9'])
     return $ LtId $ first:others
 
-blockParser :: LtParser st LatteStmt
+type LtSParser = LtParser st LatteStmt
+blockParser, declParser, assParser, incrParser, decrParser, retParser,
+    ifParser, whileParser, sExprParser :: LtSParser
+
 blockParser = do
-    char '{'
-    many $ noneOf "{}"
-    nested <- blockParser `endBy` (many $ noneOf "{}")
-    char '}'
-    return $ LtBlock nested
+    mylex $ char '{'
+    stmtL <- mylex $ many $ mylex stmtParser
+    mylex $ char '}'
+    return $ LtBlock stmtL
+
+declParser = do
+    t <- mylex typeParser
+    declL <- (mylex $ declItemParser t) `sepBy` (mylex $ char ',')
+    mylex $ char ';'
+    return $ LtDBlock declL
+
+assParser = do
+    name <- mylex idParser
+    mylex $ char '='
+    expr <- mylex exprParser
+    mylex $ char ';'
+    return LtAss name expr
+
+incrParser = do
+    name <- mylex idParser
+    mylex $ string "++"
+    mylex $ char ';'
+    return LtIncr name
+
+decrParser = do
+    name <- mylex idParser
+    mylex $ string "--"
+    mylex $ char ';'
+    return LtDecr name
+
+retParser = do
+    mylex $ keyword "return"
+    res <- optionMaybe $ mylex $ exprParser
+    mylex $ char ';'
+    return $ LtReturn $ case res of
+        Just e -> e
+        Nothing -> LtExp ()
+
+ifParser = do
+    mylex $ keyword "if"
+    mylex $ char '('
+    cond <- mylex exprParser
+    mylex $ char ')'
+    ifStmt <- mylex stmtParser
+    mbeElse <- optionMaybe $ do
+        mylex $ keyword "else"
+        mylex stmtParser
+    mylex $ char ';'
+    let elseStmt = case mbeElse of {
+        Just s -> s ;
+        Nothing -> LtPass }
+    return $ LtIf cond ifStmt elseStmt
+
+whileParser = do
+    mylex $ keyword "while"
+    mylex $ char '('
+    cond <- mylex exprParser
+    mylex $ char ')'
+    stmt <- mylex stmtParser
+    return LtWhile cond stmt
+
+sExprParser = do
+    e <- mylex exprParser
+    return LtSExpr e
+
+stmtParser :: LtSParser
+stmtParser = do
+        char ';' >> return LtPass
+    <|> blockParser
+    <|> try declParser
+    <|> try retParser
+    <|> try ifParser
+    <|> try whileParser
+    <|> try assParser
+    <|> try incrParser
+    <|> try decrParser
+    <|> try sExprParser
 
 argParser :: LtParser st LatteArg
 argParser = do
