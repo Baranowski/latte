@@ -21,13 +21,14 @@ data LatteStmt = LtSExpr LatteExpr
                | LtAss LatteId LatteExpr
                | LtDBlock [LatteDecl]
                | LtBlock [LatteStmt]
+               | LtReturn LatteExpr
                | LtPass
     deriving (Eq, Show)
-data LatteExpr = LtEOr LatteExpr LatteExpr
-               | LtEAnd LatteExpr LatteExpr
+data LatteExpr = LtEOr [LatteExpr]
+               | LtEAnd [LatteExpr]
                | LtERel LatteRel LatteExpr LatteExpr
-               | LtEAdd LatteAddOp LatteExpr LatteExpr
-               | LtEMul LatteMulOp LatteExpr LatteExpr
+               | LtEAdd LatteExpr [(LatteAddOp, LatteExpr)]
+               | LtEMul LatteExpr [(LatteMulOp, LatteExpr)]
                | LtENot LatteExpr
                | LtENeg LatteExpr
                | LtEStr String
@@ -36,6 +37,7 @@ data LatteExpr = LtEOr LatteExpr LatteExpr
                | LtETrue
                | LtEInt Int
                | LtEId LatteId
+               | LtEVoid
     deriving (Eq, Show)
 data LatteRel = Rlt
               | Rle
