@@ -57,13 +57,23 @@ idParser = do
 
 type LtSParser = LtParser st LatteStmt
 blockParser, declParser, assParser, incrParser, decrParser, retParser,
-    ifParser, whileParser, sExprParser :: LtSParser
+    ifParser, whileParser, sExprParser, passParser :: LtSParser
 
 blockParser = do
     mylex $ char '{'
     stmtL <- mylex $ many $ mylex stmtParser
     mylex $ char '}'
     return $ LtBlock stmtL
+
+declItemParser :: LatteType -> LtParser st LatteDecl
+declItemParser t = do
+    name <- mylex idParser
+    initV <- optionMaybe $ do
+        mylex $ char '='
+        mylex exprParser
+    case initV of
+        Just e -> return LtDExpr name e
+        Nothing -> return LtDEmpty name
 
 declParser = do
     t <- mylex typeParser
@@ -127,8 +137,7 @@ sExprParser = do
 
 stmtParser :: LtSParser
 stmtParser = do
-        char ';' >> return LtPass
-    <|> blockParser
+        blockParser
     <|> try declParser
     <|> try retParser
     <|> try ifParser
@@ -137,6 +146,11 @@ stmtParser = do
     <|> try incrParser
     <|> try decrParser
     <|> try sExprParser
+    <|> try passParser
+
+passParser = do
+    mylex $ char ';'
+    return LtPass
 
 argParser :: LtParser st LatteArg
 argParser = do
