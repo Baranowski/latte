@@ -36,11 +36,11 @@ mylex p = do
 
 comment :: LtParser st ()
 comment = do
-     do try (string "#" <|> string "//")
+     do try (string "#" <|>  string "//")
         anyChar `manyTill` (char '\n')
         return ()
     <|> do
-        string "/*"
+        try $ string "/*"
         anyChar `manyTill` (try $ string "*/")
         return ()
 
@@ -49,7 +49,8 @@ comment = do
 topParser :: LtParser st LatteTree
 topParser = do
     spaces
-    funL <- mylex $ many funParser
+    many (comment >> spaces)
+    funL <- mylex $ many1 funParser
     eof
     return $ LtTop funL
 
@@ -103,7 +104,7 @@ declParser = do
     t <- mylex typeParser
     declL <- (mylex $ declItemParser t) `sepBy` (mylex $ char ',')
     mylex $ char ';'
-    return $ LtDBlock declL
+    return $ LtDBlock t declL
 
 assParser = do
     name <- mylex idParser
@@ -141,7 +142,6 @@ ifParser = do
     mbeElse <- optionMaybe $ do
         mylex $ keyword "else"
         mylex stmtParser
-    mylex $ char ';'
     let elseStmt = case mbeElse of {
         Just s -> s ;
         Nothing -> LtPass }
@@ -157,6 +157,7 @@ whileParser = do
 
 sExprParser = do
     e <- mylex exprParser
+    mylex $ char ';'
     return $ LtSExpr e
 
 stmtParser = do
@@ -191,7 +192,7 @@ argParser = do
 
 -- When there is only one operator parser, we can ignore its value
 exprAbsParser nextParser [opParser] constr = do
-    eL <- nextParser `sepBy` mylex opParser
+    eL <- (mylex nextParser) `sepBy1` (mylex opParser)
     case eL of
         [e] -> return e
         _ -> return $ constr eL
@@ -222,7 +223,7 @@ exprOrParser = exprAbsParser exprAndParser [try $ string "||"] LtEOr
 exprAndParser = exprAbsParser exprRelParser [try $ string "&&"] LtEAnd
 exprRelParser = do
     e1 <- mylex exprAddParser
-    opMbe <- optionMaybe $ choice [
+    opMbe <- mylex $ optionMaybe $ choice [
         try $ string "<=" >> return Rle,
         try $ string "<" >> return Rlt,
         try $ string ">=" >> return Rge,
@@ -256,6 +257,10 @@ exprBasicParser = do
                     <|> (char '\\' >> anyChar))
            char '"'
            return $ LtEStr str
+    <|> do mylex $ char '('
+           e <- mylex exprParser
+           mylex $ char ')'
+           return e
     <|> try (keyword "true" >> return LtETrue)
     <|> try (keyword "false" >> return LtEFalse)
     <|> do str <- many1 (oneOf ['0'..'9'])

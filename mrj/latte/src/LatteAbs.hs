@@ -19,7 +19,7 @@ data LatteStmt = LtSExpr LatteExpr
                | LtIncr LatteId
                | LtDecr LatteId
                | LtAss LatteId LatteExpr
-               | LtDBlock [LatteDecl]
+               | LtDBlock LatteType [LatteDecl]
                | LtBlock [LatteStmt]
                | LtReturn LatteExpr
                | LtPass
