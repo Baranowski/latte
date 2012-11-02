@@ -210,14 +210,6 @@ exprAbsAParser nextParser opParserL constr = do
         _ -> return $ constr eFirst eL
 
 exprParser :: LtParser st LatteExpr
-{-exprParser = do
-
-    eL <- (mylex exprAndParser) `sepBy` mylex $ try $ string "||"
-    case eL of
-        [] -> fail "empty expression"
-        [e] -> return e
-        _ -> return LtEOr eL-}
-
 exprParser = exprOrParser
 exprOrParser = exprAbsParser exprAndParser [try $ string "||"] LtEOr
 exprAndParser = exprAbsParser exprRelParser [try $ string "&&"] LtEAnd
@@ -275,18 +267,6 @@ exprBasicParser = do
            case args of
                Nothing -> return $ LtEId name
                Just eL -> return $ LtEApp name eL
-{-
-exprAddParser :: LtParser st LatteExpr
-exprAddParser = do
-    eFirst <- exprMulParser
-    eL <- many $ do
-            op <- choice [
-                (char '+') >> return Ladd,
-                (char '-') >> return Lsub ]
-            e <- mylex exprMulParser
-            return (op, e)
-    return LtAdd eFirst eL
-    -}
 
 parseLatte :: String -> String -> Either ParseError LatteTree
 parseLatte = parse topParser
