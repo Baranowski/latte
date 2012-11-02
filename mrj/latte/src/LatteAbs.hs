@@ -1,8 +1,13 @@
 module LatteAbs where
 
-data LatteTree = LtTop [LatteFun]
+data Pos = Pos { line :: Int, col :: Int}
     deriving (Eq, Show)
-data LatteFun = LtFun LatteId LatteType [LatteArg] LatteStmt
+data Located a = Loc Pos a
+    deriving (Eq, Show)
+
+data LatteTree = LtTop [Located LatteFun]
+    deriving (Eq, Show)
+data LatteFun = LtFun LatteId LatteType [Located LatteArg] (Located LatteStmt)
     deriving (Eq, Show)
 data LatteType = LtInt
                | LtString
@@ -13,26 +18,26 @@ data LatteId = LtId String
     deriving (Eq, Show)
 data LatteArg = LtArg LatteId LatteType
     deriving (Eq, Show)
-data LatteStmt = LtSExpr LatteExpr
-               | LtWhile LatteExpr LatteStmt
-               | LtIf LatteExpr LatteStmt LatteStmt
+data LatteStmt = LtSExpr (Located LatteExpr)
+               | LtWhile (Located LatteExpr) (Located LatteStmt)
+               | LtIf (Located LatteExpr) (Located LatteStmt) (Located LatteStmt)
                | LtIncr LatteId
                | LtDecr LatteId
-               | LtAss LatteId LatteExpr
-               | LtDBlock LatteType [LatteDecl]
-               | LtBlock [LatteStmt]
-               | LtReturn LatteExpr
+               | LtAss LatteId (Located LatteExpr)
+               | LtDBlock LatteType [Located LatteDecl]
+               | LtBlock [Located LatteStmt]
+               | LtReturn (Located LatteExpr)
                | LtPass
     deriving (Eq, Show)
-data LatteExpr = LtEOr [LatteExpr]
-               | LtEAnd [LatteExpr]
-               | LtERel LatteRel LatteExpr LatteExpr
-               | LtEAdd LatteExpr [(LatteAddOp, LatteExpr)]
-               | LtEMul LatteExpr [(LatteMulOp, LatteExpr)]
-               | LtENot LatteExpr
-               | LtENeg LatteExpr
+data LatteExpr = LtEOr [(Located LatteExpr)]
+               | LtEAnd [(Located LatteExpr)]
+               | LtERel LatteRel (Located LatteExpr) (Located LatteExpr)
+               | LtEAdd (Located LatteExpr) [(LatteAddOp, (Located LatteExpr))]
+               | LtEMul (Located LatteExpr) [(LatteMulOp, (Located LatteExpr))]
+               | LtENot (Located LatteExpr)
+               | LtENeg (Located LatteExpr)
                | LtEStr String
-               | LtEApp LatteId [LatteExpr]
+               | LtEApp LatteId [(Located LatteExpr)]
                | LtEFalse
                | LtETrue
                | LtEInt Int
@@ -53,6 +58,6 @@ data LatteMulOp = Lmul
                 | Ldiv
                 | Lmod
     deriving (Eq, Show)
-data LatteDecl = LtDExpr LatteId LatteExpr
+data LatteDecl = LtDExpr LatteId (Located LatteExpr)
                | LtDEmpty LatteId
     deriving (Eq, Show)

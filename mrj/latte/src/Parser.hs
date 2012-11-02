@@ -44,13 +44,22 @@ comment = do
         anyChar `manyTill` (try $ string "*/")
         return ()
 
+mypos :: LtParser st Pos
+mypos = do
+    sourcePos <- getPosition
+    return $ Pos (sourceLine sourcePos) (sourceColumn sourcePos)
+
+loc p = do
+    pos <- mypos
+    res <- p
+    return $ Loc pos res
 -- Highest-level parsers
 
 topParser :: LtParser st LatteTree
 topParser = do
     spaces
     many (comment >> spaces)
-    funL <- mylex $ many1 funParser
+    funL <- mylex $ many1 $ loc funParser
     eof
     return $ LtTop funL
 
@@ -67,8 +76,8 @@ funParser = do
     resT <- mylex $ typeParser
     name <- mylex $ idParser
     argL <- mylex $ between (char '(' >> spaces) (char ')' >> spaces)
-	(argParser `sepBy` (spaces >> (char ',') >> spaces))
-    body <- mylex $ blockParser
+	((loc argParser) `sepBy` (spaces >> (char ',') >> spaces))
+    body <- mylex $ loc blockParser
     return $ LtFun name resT argL body
 
 typeParser :: LtParser st LatteType
@@ -82,8 +91,8 @@ typeParser = do
 -- Statements
 
 blockParser, declParser, assParser, incrParser, decrParser, retParser,
-    ifParser, whileParser, sExprParser, passParser,
-    stmtParser :: LtParser st LatteStmt
+    ifParser, whileParser, sExprParser, passParser :: LtParser st LatteStmt
+stmtParser :: LtParser st (Located LatteStmt)
 
 blockParser = do
     mylex $ char '{'
@@ -103,7 +112,7 @@ declItemParser t = do
 
 declParser = do
     t <- mylex typeParser
-    declL <- (mylex $ declItemParser t) `sepBy` (mylex $ char ',')
+    declL <- (loc $ mylex $ declItemParser t) `sepBy` (mylex $ char ',')
     mylex $ char ';'
     return $ LtDBlock t declL
 
@@ -130,9 +139,10 @@ retParser = do
     mylex $ keyword "return"
     res <- optionMaybe $ mylex $ exprParser
     mylex $ char ';'
+    pos <- mypos
     return $ LtReturn $ case res of
         Just e -> e
-        Nothing -> LtEVoid
+        Nothing -> Loc pos LtEVoid
 
 ifParser = do
     mylex $ keyword "if"
@@ -143,9 +153,10 @@ ifParser = do
     mbeElse <- optionMaybe $ do
         mylex $ keyword "else"
         mylex stmtParser
+    pos <- mypos
     let elseStmt = case mbeElse of {
         Just s -> s ;
-        Nothing -> LtPass }
+        Nothing -> Loc pos LtPass }
     return $ LtIf cond ifStmt elseStmt
 
 whileParser = do
@@ -161,7 +172,7 @@ sExprParser = do
     mylex $ char ';'
     return $ LtSExpr e
 
-stmtParser = do
+stmtParser = loc $ do
         blockParser
     <|> try declParser
     <|> try retParser
@@ -193,14 +204,16 @@ argParser = do
 
 -- When there is only one operator parser, we can ignore its value
 exprAbsParser nextParser [opParser] constr = do
+    pos <- mypos
     eL <- (mylex nextParser) `sepBy1` (mylex opParser)
     case eL of
         [e] -> return e
-        _ -> return $ constr eL
+        _ -> return $ Loc pos $ constr eL
 
 -- When there are more operator parsers, the result will be more complex:
 -- We associate an operator with every expression except for the first one
 exprAbsAParser nextParser opParserL constr = do
+    pos <- mypos
     eFirst <- mylex nextParser
     eL <- many $ do
         op <- mylex $ choice opParserL
@@ -208,13 +221,14 @@ exprAbsAParser nextParser opParserL constr = do
         return (op, e)
     case eL of
         [] -> return eFirst
-        _ -> return $ constr eFirst eL
+        _ -> return $ Loc pos $ constr eFirst eL
 
-exprParser :: LtParser st LatteExpr
+exprParser :: LtParser st (Located LatteExpr)
 exprParser = exprOrParser
 exprOrParser = exprAbsParser exprAndParser [try $ string "||"] LtEOr
 exprAndParser = exprAbsParser exprRelParser [try $ string "&&"] LtEAnd
 exprRelParser = do
+    pos <- mypos
     e1 <- mylex exprAddParser
     opMbe <- mylex $ optionMaybe $ choice [
         try $ string "<=" >> return Rle,
@@ -227,7 +241,7 @@ exprRelParser = do
         Nothing -> return e1
         Just op -> do
             e2 <- mylex exprAddParser
-            return $ LtERel op e1 e2
+            return $ Loc pos $ LtERel op e1 e2
 exprAddParser = exprAbsAParser exprMulParser [
     (char '+') >> return Ladd,
     (char '-') >> return Lsub] LtEAdd
@@ -236,38 +250,44 @@ exprMulParser = exprAbsAParser exprUnaryParser [
     (char '/') >> return Ldiv,
     (char '%') >> return Lmod ] LtEMul
 exprUnaryParser = do
+        loc $ do
            mylex $ char '!'
            e <- exprBasicParser
            return $ LtENot e
-    <|> do char '-'
+    <|> (loc $ do
+           char '-'
            e <- exprBasicParser
-           return $ LtENeg e
+           return $ LtENeg e)
     <|> exprBasicParser
 
 exprBasicParser = do
-           char '"'
-           str <- many (noneOf "\\\""
-                    <|> (char '\\' >> anyChar))
-           char '"'
-           return $ LtEStr str
-    <|> do mylex $ char '('
+        do mylex $ char '('
            e <- mylex exprParser
            mylex $ char ')'
            return e
-    <|> try (keyword "true" >> return LtETrue)
-    <|> try (keyword "false" >> return LtEFalse)
-    <|> do str <- many1 (oneOf ['0'..'9'])
-           let i = (read str) :: Int
-           return $ LtEInt i
-    <|> do name <- mylex idParser
-           args <- optionMaybe $ do
-               mylex $ char '('
-               eL <- exprParser `sepBy` (mylex $ char ',')
-               mylex $ char ')'
-               return eL
-           case args of
-               Nothing -> return $ LtEId name
-               Just eL -> return $ LtEApp name eL
+    <|> (loc $ do
+            do
+               char '"'
+               str <- many (noneOf "\\\""
+                        <|> (char '\\' >> anyChar))
+               char '"'
+               return $ LtEStr str
+        <|> try (keyword "true" >> return LtETrue)
+        <|> try (keyword "false" >> return LtEFalse)
+        <|> do
+               str <- many1 (oneOf ['0'..'9'])
+               let i = (read str) :: Int
+               return $ LtEInt i
+        <|> do
+               name <- mylex idParser
+               args <- optionMaybe $ do
+                   mylex $ char '('
+                   eL <- exprParser `sepBy` (mylex $ char ',')
+                   mylex $ char ')'
+                   return eL
+               case args of
+                   Nothing -> return $ LtEId name
+                   Just eL -> return $ LtEApp name eL)
 
 parseLatte :: String -> String -> Either ParseError LatteTree
 parseLatte = parse topParser
