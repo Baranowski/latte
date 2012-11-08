@@ -6,6 +6,7 @@ import System.Exit (exitSuccess, exitFailure)
 import System.IO (hPutStrLn, stderr)
 
 import Parser
+import Analyzer
 
 compileFile :: String -> IO ()
 compileFile path = do
@@ -18,7 +19,12 @@ compileFile path = do
             Left err -> do
                 hPutStrLn stderr $ show err
                 exitFailure
-            Right lt -> do putStrLn $ show lt
+            Right lt -> case analyze lt of
+                Left err -> do
+                    hPutStrLn stderr $ show err
+                    exitFailure
+                Right full -> do
+                    putStrLn $ show full
 
 main = do
     args <- getArgs

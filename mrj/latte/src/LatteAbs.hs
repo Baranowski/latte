@@ -1,5 +1,7 @@
 module LatteAbs where
 
+import AbsCommon
+
 data Pos = Pos { line :: Int, col :: Int}
     deriving (Eq, Show)
 data Located a = Loc Pos a
@@ -8,11 +10,6 @@ data Located a = Loc Pos a
 data LatteTree = LtTop [Located LatteFun]
     deriving (Eq, Show)
 data LatteFun = LtFun LatteId LatteType [Located LatteArg] (Located LatteStmt)
-    deriving (Eq, Show)
-data LatteType = LtInt
-               | LtString
-               | LtBool
-               | LtVoid
     deriving (Eq, Show)
 data LatteId = LtId String
     deriving (Eq, Show)
@@ -43,13 +40,6 @@ data LatteExpr = LtEOr [(Located LatteExpr)]
                | LtEInt Int
                | LtEId LatteId
                | LtEVoid
-    deriving (Eq, Show)
-data LatteRel = Rlt
-              | Rle
-              | Rgt
-              | Rge
-              | Req
-              | Rne
     deriving (Eq, Show)
 data LatteAddOp = Ladd
                 | Lsub
