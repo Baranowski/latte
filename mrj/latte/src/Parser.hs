@@ -4,6 +4,7 @@ module Parser (
 
 import Text.ParserCombinators.Parsec
 
+import AbsCommon
 import LatteAbs
 
 type LtParser st res = GenParser Char st res

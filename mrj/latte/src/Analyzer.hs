@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts, UndecidableInstances, OverlappingInstances #-}
 module Analyzer (
-    analyze
+    rewriteProgram
 ) where
 
 import qualified Data.Map as M
@@ -13,8 +13,9 @@ import LatteAbs
 import Abs2ndStage
 
 data SemError = SErr Pos String
+    deriving (Show)
 type MyM = StateT Int (Either SemError)
-type FunEnv = M.Map String (UniqId, LatteFun)
+type FunEnv = M.Map String (UniqId, Located LatteFun)
 type VarEnv = M.Map String (UniqId, Type)
 data FunVarEnv = FunVarEnv {fEnv :: FunEnv, vEnv :: VarEnv}
 
@@ -81,14 +82,14 @@ rwtStatement (Loc p _) = do
 
 rwtStmtDecls :: (Located LatteStmt) -> WriterT [Declaration] (StateT VarEnv (ReaderT FunEnv MyM)) Statement
 rwtStmtDecls (Loc p (LtSExpr lexpr)) = do
-    newE <- rwtExpr lexpr
+    (newE, _) <- lift $ rwtExpr lexpr
     return $ SExpr newE
 rwtStmtDecls (Loc p (LtWhile lexpr lstmt)) = do
-    newE <- rwtExprTyped LtBool lexpr
+    newE <- lift $ rwtExprTyped LtBool lexpr
     newS <- rwtStmtDecls lstmt
     return $ While newE newS
 rwtStmtDecls (Loc p (LtIf lexpr lstmt1 lstmt2)) = do
-    newE <- rwtExprTyped LtBool lexpr
+    newE <- lift $ rwtExprTyped LtBool lexpr
     newS <- rwtStmtDecls lstmt1
     case lstmt2 of
         Loc p LtPass -> return $ If newE newS
@@ -104,50 +105,52 @@ rwtStmtDecls (Loc p (LtDecr name)) = do
     (varId, _) <- lookupVar name p
     return $ Decr varId
 rwtStmtDecls (Loc p (LtAss name lexpr)) = do
-    (newE, exprT) <- rwtExpr lexpr
+    (newE, exprT) <- lift $ rwtExpr lexpr
     assertVarType name exprT p
     (varId, _) <- lookupVar name p
     return $ Ass varId newE
 rwtStmtDecls (Loc p (LtDBlock t decls)) = do
-    forM decls rwtDecl
+    newDs <- forM decls rwtDecl
+    return $ TmpFlatten newDs
     where
         rwtDecl (Loc dP (LtDExpr name lexpr)) = do
-            newE <- rwtExprTyped t lexpr
+            newE <- lift $ rwtExprTyped t lexpr
             newId <- addVariable name t
-            tell (Decl t newId)
+            tell [Decl t newId]
             return $ Ass newId newE
         rwtDecl (Loc dP (LtDEmpty name)) = do
             newId <- addVariable name t
-            tell (Decl t newId)
+            tell [Decl t newId]
             return Pass
 rwtStmtDecls lblock@(Loc p (LtBlock _)) = do
-    newBlock <- rwtStatement lblock
+    newBlock <- lift $ rwtStatement lblock
     return newBlock
 -- TODO: sprawdzac typ returnow
 -- TODO: sprawdzac pokrycie returnami
 rwtStmtDecls (Loc p (LtReturn (Loc _ LtEVoid))) = do
     return Ret
 rwtStmtDecls (Loc p (LtReturn lexpr)) = do
-    (newE, exprT) <- rwtExpr lexpr
+    (newE, exprT) <- lift $ rwtExpr lexpr
     return $ RetExpr newE
 rwtStmtDecls (Loc p (LtPass)) = do
     return Pass
 
-rwtExprTyped :: Type -> (Located LatteExpr) -> m
+rwtExprTyped :: Type -> (Located LatteExpr) -> StateT VarEnv (ReaderT FunEnv MyM) Expression
 rwtExprTyped t lexpr@(Loc p expr) = do
     (newE, exprT) <- rwtExpr lexpr
     when (t /= exprT) (semErr p ("Expression is of type: " ++ (show exprT) ++ ", expected: " ++ (show t)))
     return newE
+rwtExpr :: (Located LatteExpr) -> StateT VarEnv (ReaderT FunEnv MyM) (Expression, Type)
 rwtExpr lexpr = do
-    varEnv <- lift get
+    varEnv <- get
     funEnv <- ask
-    runReaderT rwtExpr' (FunVarEnv funEnv varEnv) lexpr
+    lift $ lift $ runReaderT (rwtExpr' lexpr) (FunVarEnv funEnv varEnv)
 
 rwtExpr' :: (Located LatteExpr) -> ReaderT FunVarEnv MyM (Expression, Type)
-rwtExpr' _ = return (LtEVoid, LtInt)
+rwtExpr' _ = return (ConstInt 0, LtInt)
 
 rwtFunction f@(Loc p (LtFun _ retT argL lblock)) = do
-    declL <- forM argL $ \ Loc p (LtArg name argT) -> do
+    declL <- forM argL $ \ (Loc p (LtArg name argT)) -> do
         argId <- addVariable name argT
         return $ Decl argT argId
     newBlock <- rwtStatement lblock
@@ -155,15 +158,23 @@ rwtFunction f@(Loc p (LtFun _ retT argL lblock)) = do
 
 getFEnv :: [Located LatteFun] -> StateT FunEnv MyM ()
 getFEnv fL = do
-    forM_ fL (\(Loc p f@(LtFun name _ _ _)) -> do
-        env <- lift . lift get
-        when (name `M.member` env) (Left $
-            semErr p "Another declaration of function " ++ name)
-        id <- nextId
-        lift $ put $ M.insert name (nextId, f) env)
+    forM_ fL addFun
+    where
+        addFun :: (Located LatteFun) -> StateT FunEnv MyM ()
+        addFun lfun@(Loc p f@(LtFun name _ _ _)) = do
+            env <- get
+            when (name `M.member` env) (semErr p $ "Another declaration of function " ++ name)
+            id <- nextId
+            put $ M.insert name (id, lfun) env
 
 rwtProgram (LtTop lfL) = do
     fEnv <- execStateT (getFEnv lfL) M.empty
-    fL <- mapM (\ Loc f -> rwtFunction fEnv f) lfL
-    return $ Prog fL
+    let fEnvL = M.toList fEnv
+    newFunL <- forM fEnvL $ \(_, (id, ltFun)) -> do
+        newFun <- runReaderT (evalStateT (rwtFunction ltFun) M.empty) fEnv
+        return (id, newFun)
+    return $ Prog (M.fromList newFunL)
+
+rewriteProgram lt = evalStateT (rwtProgram lt) 0
+    
 

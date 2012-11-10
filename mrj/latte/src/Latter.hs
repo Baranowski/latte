@@ -19,7 +19,7 @@ compileFile path = do
             Left err -> do
                 hPutStrLn stderr $ show err
                 exitFailure
-            Right lt -> case analyze lt of
+            Right lt -> putStrLn (show lt) >> case rewriteProgram lt of
                 Left err -> do
                     hPutStrLn stderr $ show err
                     exitFailure

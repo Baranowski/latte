@@ -9,7 +9,7 @@ type UniqId = Int
 data Program = Prog (M.Map UniqId Function)
     deriving (Show, Eq)
 
-data Function = Func UniqId Type [Declaration] Statement
+data Function = Func Type [Declaration] Statement
     deriving (Show, Eq)
 
 data Declaration = Decl Type UniqId
@@ -28,6 +28,7 @@ data Statement =
     | SExpr Expression
     | SEmpty
     | Pass
+    | TmpFlatten [Statement]
     deriving (Show, Eq)
 
 data Expression =
