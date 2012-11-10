@@ -11,8 +11,7 @@ data LatteTree = LtTop [Located LatteFun]
     deriving (Eq, Show)
 data LatteFun = LtFun LatteId LatteType [Located LatteArg] (Located LatteStmt)
     deriving (Eq, Show)
-data LatteId = LtId String
-    deriving (Eq, Show)
+type LatteId = String
 data LatteArg = LtArg LatteId LatteType
     deriving (Eq, Show)
 data LatteStmt = LtSExpr (Located LatteExpr)

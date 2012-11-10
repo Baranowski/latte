@@ -68,7 +68,7 @@ idParser = try $ do
     word <- wordParser
     if word `elem` reservedKeywords
         then unexpected $ "reserved keyword: \"" ++ word ++ "\""
-        else return $ LtId word
+        else return word
 
 
 funParser :: LtParser st LatteFun
