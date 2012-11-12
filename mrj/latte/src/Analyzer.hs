@@ -249,9 +249,19 @@ rwtProgram (LtTop lfL) = do
     fEnv <- execStateT (getFEnv lfL) M.empty
     let fEnvL = M.toList fEnv
     newFunL <- forM fEnvL $ \(_, (id, ltFun)) -> do
-        newFun <- runReaderT (evalStateT (rwtFunction ltFun) M.empty) fEnv
+        newFun <- runReaderT (evalStateT (rwtFunction ltFun) M.empty) (fEnv `M.union` (M.fromList functions))
         return (id, newFun)
     return $ Prog (M.fromList newFunL)
+    where
+        fakeFunction fakeId name fType argTypes =
+            (name, (fakeId, Loc (Pos 0 0) (LtFun name fType
+                ((\t -> Loc (Pos 0 0) (LtArg "" t)) `map` argTypes) (Loc (Pos 0 0) (LtBlock [])))))
+        functions = [
+            (fakeFunction (-1) "printInt" LtInt [LtInt]),
+            (fakeFunction (-2) "printString" LtString [LtString]),
+            (fakeFunction (-3) "error" LtVoid []),
+            (fakeFunction (-4) "readInt" LtInt []),
+            (fakeFunction (-5) "readString" LtString []) ]
 
 rewriteProgram lt = evalStateT (rwtProgram lt) 0
     
