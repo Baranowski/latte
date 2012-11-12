@@ -64,25 +64,25 @@ instance (ClockedMonad m) => MonadWritingVars (StateT VarEnv m) where
 instance (MonadTrans t, MonadWritingVars m, Monad (t m)) => MonadWritingVars (t m) where
     addVariable name tp = lift $ addVariable name tp
 
-rwtStatement :: (Located LatteStmt) ->  StateT VarEnv (ReaderT FunEnv MyM) Statement
+rwtStatement :: Type -> (Located LatteStmt) ->  StateT VarEnv (ReaderT FunEnv MyM) Statement
 -- TODO: nazwy zmiennych nie moga sie powtarzac
-rwtStatement (Loc p (LtBlock stmtL)) = do
-    (newStmtL, decls) <- runWriterT $ forM stmtL rwtStmtDecls
+rwtStatement t (Loc p (LtBlock stmtL)) = do
+    (newStmtL, decls) <- runWriterT $ runReaderT (forM stmtL rwtStmtDecls) t
     return $ Blck decls newStmtL
-rwtStatement (Loc p _) = do
+rwtStatement t (Loc p _) = do
     semErr p "Expecting block, got other kind of statement"
     -- this should never happen
 
-rwtStmtDecls :: (Located LatteStmt) -> WriterT [Declaration] (StateT VarEnv (ReaderT FunEnv MyM)) Statement
+rwtStmtDecls :: (Located LatteStmt) -> ReaderT Type (WriterT [Declaration] (StateT VarEnv (ReaderT FunEnv MyM))) Statement
 rwtStmtDecls (Loc p (LtSExpr lexpr)) = do
-    (newE, _) <- lift $ rwtExpr lexpr
+    (newE, _) <- lift $ lift $ rwtExpr lexpr
     return $ SExpr newE
 rwtStmtDecls (Loc p (LtWhile lexpr lstmt)) = do
-    newE <- lift $ rwtExprTyped LtBool lexpr
+    newE <- lift $ lift $ rwtExprTyped LtBool lexpr
     newS <- rwtStmtDecls lstmt
     return $ While newE newS
 rwtStmtDecls (Loc p (LtIf lexpr lstmt1 lstmt2)) = do
-    newE <- lift $ rwtExprTyped LtBool lexpr
+    newE <- lift $ lift $ rwtExprTyped LtBool lexpr
     newS <- rwtStmtDecls lstmt1
     case lstmt2 of
         Loc p LtPass -> return $ If newE newS
@@ -98,7 +98,7 @@ rwtStmtDecls (Loc p (LtDecr name)) = do
     (varId, _) <- lookupVar name p
     return $ Decr varId
 rwtStmtDecls (Loc p (LtAss name lexpr)) = do
-    (newE, exprT) <- lift $ rwtExpr lexpr
+    (newE, exprT) <- lift $ lift $ rwtExpr lexpr
     assertVarType name exprT p
     (varId, _) <- lookupVar name p
     return $ Ass varId newE
@@ -107,7 +107,7 @@ rwtStmtDecls (Loc p (LtDBlock t decls)) = do
     return $ TmpFlatten newDs
     where
         rwtDecl (Loc dP (LtDExpr name lexpr)) = do
-            newE <- lift $ rwtExprTyped t lexpr
+            newE <- lift $ lift $ rwtExprTyped t lexpr
             newId <- addVariable name t
             tell [Decl t newId]
             return $ Ass newId newE
@@ -116,13 +116,16 @@ rwtStmtDecls (Loc p (LtDBlock t decls)) = do
             tell [Decl t newId]
             return Pass
 rwtStmtDecls lblock@(Loc p (LtBlock _)) = do
-    newBlock <- lift $ rwtStatement lblock
+    t <- ask
+    newBlock <- lift $ lift $ rwtStatement t lblock
     return newBlock
--- TODO: sprawdzac typ returnow
 rwtStmtDecls (Loc p (LtReturn (Loc _ LtEVoid))) = do
+    t <- ask
+    when (t /= LtVoid) (semErr p "This function is expected to return a value")
     return Ret
 rwtStmtDecls (Loc p (LtReturn lexpr)) = do
-    (newE, exprT) <- lift $ rwtExpr lexpr
+    t <- ask
+    newE <- lift $ lift $ rwtExprTyped t lexpr
     return $ RetExpr newE
 rwtStmtDecls (Loc p (LtPass)) = do
     return Pass
@@ -230,13 +233,11 @@ rwtExpr' (Loc p (LtEId name)) = do
     return (EId varId, varT)
 
 --TODO: nazwy argumentow nie moga sie powtarzac
---TODO: kazda funckja zwraca wartosc
---TODO: typ zwracanej wartosci
 rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
     declL <- forM argL $ \ (Loc p (LtArg name argT)) -> do
         argId <- addVariable name argT
         return $ Decl argT argId
-    newBlock <- rwtStatement lblock
+    newBlock <- rwtStatement retT lblock
     let returns = checkReturn newBlock
     when (not returns && retT /= LtVoid) (semErr p ("Function " ++ name ++ " lacks 'return' statement"))
     return $ Func retT declL newBlock
