@@ -64,14 +64,6 @@ instance (ClockedMonad m) => MonadWritingVars (StateT VarEnv m) where
 instance (MonadTrans t, MonadWritingVars m, Monad (t m)) => MonadWritingVars (t m) where
     addVariable name tp = lift $ addVariable name tp
 
---lookupVar :: (MonadState s m, ErrorableMonad m) => String -> Pos -> StateT VarEnv m UniqId
-
--- assertVarType :: (MonadState s m, ErrorableMonad m) => String -> Type -> Pos -> StateT VarEnv m UniqId
-    
--- addVariable name t -> id
--- lookupVar name pos -> (id, type)
--- assertVarType name t pos
-
 rwtStatement :: (Located LatteStmt) ->  StateT VarEnv (ReaderT FunEnv MyM) Statement
 -- TODO: nazwy zmiennych nie moga sie powtarzac
 rwtStatement (Loc _ (LtBlock stmtL)) = do
@@ -160,24 +152,26 @@ rwtExpr' (Loc _ (LtEOr lexprs)) = do
 rwtExpr' (Loc _ (LtEAnd lexprs)) = do
     newEL <- forM lexprs (rwtExprTyped' LtBool)
     return (And newEL, LtBool)
--- TODO: porownywanie booli
 rwtExpr' (Loc p (LtERel rel lexpr1 lexpr2)) = do
     (newE, eT) <- rwtExpr' lexpr1
     case eT of
         LtInt -> rewriteInt p newE rel lexpr2
         LtString -> rewriteStr p newE rel lexpr2
+        LtBool -> rewriteBool p newE rel lexpr2
         _ -> semErr p ("Comparison is not supported for this type: " ++ (show eT))
     where
         rewriteInt p newE rel lexpr = do
             newE2 <- rwtExprTyped' LtInt lexpr
             return (IntComp rel newE newE2, LtBool)
-        rewriteStr p newE rel lexpr = do
-            newE2 <- rwtExprTyped' LtString lexpr
+        rewriteOther constr t p newE rel lexpr = do
+            newE2 <- rwtExprTyped' t lexpr
             when (rel `notElem` [Req, Rne]) (semErr p ("Illegal operator for string comparison"))
             let newR = case rel of {
                 Req -> Eq ;
                 _ -> Neq }
-            return (StrComp newR newE newE2, LtBool)
+            return (constr newR newE newE2, LtBool)
+        rewriteStr = rewriteOther StrComp LtString
+        rewriteBool = rewriteOther BoolComp LtBool
 -- TODO: konkatenacja stringow
 rwtExpr' (Loc p (LtEAdd lexpr1 exprL)) = do
     newE1 <- rwtExprTyped' LtInt lexpr1
