@@ -174,9 +174,12 @@ rwtExpr' (Loc p (LtERel rel lexpr1 lexpr2)) = do
         rewriteBool = rewriteOther BoolComp LtBool
 -- TODO: konkatenacja stringow
 rwtExpr' (Loc p (LtEAdd lexpr1 exprL)) = do
-    newE1 <- rwtExprTyped' LtInt lexpr1
-    fullE <- foldM rewriteAdd newE1 exprL
-    return (fullE, LtInt)
+    (newE1, e1T) <- rwtExpr' lexpr1
+    fullE <- case e1T of
+        LtInt -> foldM rewriteAdd newE1 exprL
+        LtString -> foldM rewriteConcat newE1 exprL
+        _ -> semErr p ("Operator is not defined for type: " ++ (show e1T))
+    return (fullE, e1T)
     where
         rewriteAdd newE (op, lexpr) = do
             nextE <- rwtExprTyped' LtInt lexpr
@@ -184,6 +187,10 @@ rwtExpr' (Loc p (LtEAdd lexpr1 exprL)) = do
                 Ladd -> '+' ;
                 Lsub -> '-' }
             return $ Arithm opCh newE nextE
+        rewriteConcat newE (op, lexpr) = do
+            nextE <- rwtExprTyped' LtString lexpr
+            when (op /= Ladd) (semErr p ("Only '+' operator is defined for type: " ++ (show LtString)))
+            return $ Concat newE nextE
 rwtExpr' (Loc p (LtEMul lexpr1 exprL)) = do
     newE1 <- rwtExprTyped' LtInt lexpr1
     fullE <- foldM rewriteMul newE1 exprL
