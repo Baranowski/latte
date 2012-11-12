@@ -73,6 +73,7 @@ instance (MonadTrans t, MonadWritingVars m, Monad (t m)) => MonadWritingVars (t 
 -- assertVarType name t pos
 
 rwtStatement :: (Located LatteStmt) ->  StateT VarEnv (ReaderT FunEnv MyM) Statement
+-- TODO: nazwy zmiennych nie moga sie powtarzac
 rwtStatement (Loc _ (LtBlock stmtL)) = do
     (newStmtL, decls) <- runWriterT $ forM stmtL rwtStmtDecls
     return $ Blck decls newStmtL
@@ -159,6 +160,7 @@ rwtExpr' (Loc _ (LtEOr lexprs)) = do
 rwtExpr' (Loc _ (LtEAnd lexprs)) = do
     newEL <- forM lexprs (rwtExprTyped' LtBool)
     return (And newEL, LtBool)
+-- TODO: porownywanie booli
 rwtExpr' (Loc p (LtERel rel lexpr1 lexpr2)) = do
     (newE, eT) <- rwtExpr' lexpr1
     case eT of
@@ -176,6 +178,7 @@ rwtExpr' (Loc p (LtERel rel lexpr1 lexpr2)) = do
                 Req -> Eq ;
                 _ -> Neq }
             return (StrComp newR newE newE2, LtBool)
+-- TODO: konkatenacja stringow
 rwtExpr' (Loc p (LtEAdd lexpr1 exprL)) = do
     newE1 <- rwtExprTyped' LtInt lexpr1
     fullE <- foldM rewriteAdd newE1 exprL
@@ -227,6 +230,9 @@ rwtExpr' (Loc p (LtEId name)) = do
         Just res -> return res }
     return (EId varId, varT)
 
+--TODO: nazwy argumentow nie moga sie powtarzac
+--TODO: kazda funckja zwraca wartosc
+--TODO: typ zwracanej wartosci
 rwtFunction f@(Loc p (LtFun _ retT argL lblock)) = do
     declL <- forM argL $ \ (Loc p (LtArg name argT)) -> do
         argId <- addVariable name argT
