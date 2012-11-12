@@ -146,8 +146,86 @@ rwtExpr lexpr = do
     funEnv <- ask
     lift $ lift $ runReaderT (rwtExpr' lexpr) (FunVarEnv funEnv varEnv)
 
+rwtExprTyped' :: Type -> (Located LatteExpr) -> ReaderT FunVarEnv MyM Expression
+rwtExprTyped' t lexpr@(Loc p _) = do
+    (newE, eT) <- rwtExpr' lexpr
+    when (t /= eT) (semErr p ("Expression is of type: " ++ (show eT) ++ ", expected: " ++ (show t)))
+    return newE
+
 rwtExpr' :: (Located LatteExpr) -> ReaderT FunVarEnv MyM (Expression, Type)
-rwtExpr' _ = return (ConstInt 0, LtInt)
+rwtExpr' (Loc _ (LtEOr lexprs)) = do
+    newEL <- forM lexprs (rwtExprTyped' LtBool)
+    return (Or newEL, LtBool)
+rwtExpr' (Loc _ (LtEAnd lexprs)) = do
+    newEL <- forM lexprs (rwtExprTyped' LtBool)
+    return (And newEL, LtBool)
+rwtExpr' (Loc p (LtERel rel lexpr1 lexpr2)) = do
+    (newE, eT) <- rwtExpr' lexpr1
+    case eT of
+        LtInt -> rewriteInt p newE rel lexpr2
+        LtString -> rewriteStr p newE rel lexpr2
+        _ -> semErr p ("Comparison is not supported for this type: " ++ (show eT))
+    where
+        rewriteInt p newE rel lexpr = do
+            newE2 <- rwtExprTyped' LtInt lexpr
+            return (IntComp rel newE newE2, LtBool)
+        rewriteStr p newE rel lexpr = do
+            newE2 <- rwtExprTyped' LtString lexpr
+            when (rel `notElem` [Req, Rne]) (semErr p ("Illegal operator for string comparison"))
+            let newR = case rel of {
+                Req -> Eq ;
+                _ -> Neq }
+            return (StrComp newR newE newE2, LtBool)
+rwtExpr' (Loc p (LtEAdd lexpr1 exprL)) = do
+    newE1 <- rwtExprTyped' LtInt lexpr1
+    fullE <- foldM rewriteAdd newE1 exprL
+    return (fullE, LtInt)
+    where
+        rewriteAdd newE (op, lexpr) = do
+            nextE <- rwtExprTyped' LtInt lexpr
+            let opCh = case op of {
+                Ladd -> '+' ;
+                Lsub -> '-' }
+            return $ Arithm opCh newE nextE
+rwtExpr' (Loc p (LtEMul lexpr1 exprL)) = do
+    newE1 <- rwtExprTyped' LtInt lexpr1
+    fullE <- foldM rewriteMul newE1 exprL
+    return (fullE, LtInt)
+    where
+        rewriteMul newE (op, lexpr) = do
+            nextE <- rwtExprTyped' LtInt lexpr
+            let opCh = case op of {
+                Lmul -> '*' ;
+                Ldiv -> '/' ;
+                Lmod -> '%' }
+            return $ Arithm opCh newE nextE
+rwtExpr' (Loc p (LtENot lexpr)) = do
+    newE <- rwtExprTyped' LtBool lexpr
+    return (Not newE, LtBool)
+rwtExpr' (Loc p (LtENeg lexpr)) = do
+    newE <- rwtExprTyped' LtInt lexpr
+    return (Neg newE, LtInt)
+rwtExpr' (Loc _ (LtEStr str)) = do
+    return (ConstStr str, LtString)
+rwtExpr' (Loc p (LtEApp name exprL)) = do
+    funMbe <- asks ((M.lookup name) . fEnv)
+    (funId, ltFun) <- case funMbe of {
+        Nothing -> semErr p ("No such function: " ++ name) ;
+        Just res -> return res}
+    let (Loc _ (LtFun _ funT argL _)) = ltFun
+    when ((length argL) /= (length exprL)) (semErr p ("Too many or too few arguments passed to function " ++ name))
+    let zipL = exprL `zip` argL
+    newEL <- forM zipL (\(lexpr, Loc _ (LtArg _ argT)) -> rwtExprTyped' argT lexpr)
+    return (App funId newEL, funT)
+rwtExpr' (Loc p LtEFalse) = return (ConstBool False, LtBool)
+rwtExpr' (Loc p LtETrue) = return (ConstBool True, LtBool)
+rwtExpr' (Loc p (LtEInt i)) = return (ConstInt i, LtInt)
+rwtExpr' (Loc p (LtEId name)) = do
+    varMbe <- asks ((M.lookup name) . vEnv)
+    (varId, varT) <- case varMbe of {
+        Nothing -> semErr p ("No such variable: " ++ name) ;
+        Just res -> return res }
+    return (EId varId, varT)
 
 rwtFunction f@(Loc p (LtFun _ retT argL lblock)) = do
     declL <- forM argL $ \ (Loc p (LtArg name argT)) -> do
