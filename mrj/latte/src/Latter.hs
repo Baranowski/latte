@@ -13,7 +13,7 @@ compileFile path = do
     readRes <- (try $ readFile path) :: IO (Either IOError String)
     case readRes of
         Left err -> do
-            hPutStrLn stderr $ "Nie mozna otworzyc pliku: " ++ path
+            hPutStrLn stderr $ "Cannot open file: " ++ path
             exitFailure
         Right content -> case parseLatte path content of
             Left err -> do
@@ -34,6 +34,6 @@ main = do
         [path] -> compileFile path
         otherwise -> do
             progName <- getProgName
-            hPutStrLn stderr $ "Nieprawidlowe wywolanie programu. Oczekiwano:\n"
+            hPutStrLn stderr $ "Wrong arguments. Expected:\n"
                 ++ progName ++ " [plik zrodlowy]"
             exitFailure
