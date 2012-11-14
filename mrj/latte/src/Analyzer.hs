@@ -13,7 +13,8 @@ import LatteAbs
 import Abs2ndStage
 
 data SemError = SErr Pos String
-    deriving (Show)
+instance Show SemError where
+    show (SErr (Pos l c) str) = "line " ++ (show l) ++ ", column " ++ (show c) ++ "\n" ++ str
 type MyM = StateT Int (Either SemError)
 type FunEnv = M.Map String (UniqId, Located LatteFun)
 data VarEnv = VEnv { ids :: M.Map String (UniqId, Type), names :: [String] }

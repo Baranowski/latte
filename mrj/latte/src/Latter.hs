@@ -8,7 +8,6 @@ import System.IO (hPutStrLn, stderr)
 import Parser
 import Analyzer
 
--- TODO: wypisywanie OK lub ERR
 compileFile :: String -> IO ()
 compileFile path = do
     readRes <- (try $ readFile path) :: IO (Either IOError String)
@@ -18,14 +17,16 @@ compileFile path = do
             exitFailure
         Right content -> case parseLatte path content of
             Left err -> do
+                hPutStrLn stderr "ERROR"
                 hPutStrLn stderr $ show err
                 exitFailure
-            Right lt -> putStrLn (show lt) >> case rewriteProgram lt of
+            Right lt -> case rewriteProgram lt of
                 Left err -> do
+                    hPutStrLn stderr "ERROR"
                     hPutStrLn stderr $ show err
                     exitFailure
                 Right full -> do
-                    putStrLn $ show full
+                    hPutStrLn stderr "OK"
 
 main = do
     args <- getArgs
