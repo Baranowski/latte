@@ -1,11 +1,15 @@
 module AbsCommon where
 
--- TODO: wypisywanie typu
 data LatteType = LtInt
                | LtString
                | LtBool
                | LtVoid
-    deriving (Eq, Show)
+    deriving (Eq)
+instance Show LatteType where
+    show LtInt = "int"
+    show LtString = "string"
+    show LtBool = "bool"
+    show LtVoid = "void"
 
 data LatteRel = Rlt
               | Rle
