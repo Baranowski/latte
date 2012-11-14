@@ -88,6 +88,10 @@ rwtStmtDecls (Loc p (LtWhile lexpr lstmt)) = do
     newE <- lift $ lift $ rwtExprTyped LtBool lexpr
     newS <- rwtStmtDecls lstmt
     return $ While newE newS
+rwtStmtDecls (Loc _ (LtIf (Loc _ (LtETrue)) lstmt1 _)) =
+    rwtStmtDecls lstmt1;
+rwtStmtDecls (Loc _ (LtIf (Loc _ (LtEFalse)) _ lstmt2)) =
+    rwtStmtDecls lstmt2;
 rwtStmtDecls (Loc p (LtIf lexpr lstmt1 lstmt2)) = do
     newE <- lift $ lift $ rwtExprTyped LtBool lexpr
     newS <- rwtStmtDecls lstmt1
