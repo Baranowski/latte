@@ -16,7 +16,7 @@ data SemError = SErr Pos String
     deriving (Show)
 type MyM = StateT Int (Either SemError)
 type FunEnv = M.Map String (UniqId, Located LatteFun)
-type VarEnv = M.Map String (UniqId, Type)
+data VarEnv = VEnv { ids :: M.Map String (UniqId, Type), names :: [String] }
 data FunVarEnv = FunVarEnv {fEnv :: FunEnv, vEnv :: VarEnv}
 
 class (Monad m) => ErrorableMonad m where
@@ -41,7 +41,7 @@ class (Monad m) => MonadWithVars m where
     assertVarType :: String -> Type -> Pos -> m ()
 instance (ErrorableMonad m) => MonadWithVars (StateT VarEnv m) where
     lookupVar name p = do
-        mbeVar <- gets $ M.lookup name
+        mbeVar <- gets $ (M.lookup name) . ids
         case mbeVar of
             Nothing -> semErr p ("Reference to unknown variable: " ++ name)
             Just var -> return var
@@ -54,19 +54,26 @@ instance (MonadTrans t, MonadWithVars m, Monad (t m)) => MonadWithVars (t m) whe
     assertVarType name t p = lift $ assertVarType name t p
 
 class (Monad m) => MonadWritingVars m where
-    addVariable :: String -> Type -> m UniqId
-instance (ClockedMonad m) => MonadWritingVars (StateT VarEnv m) where
-    addVariable name t = do
+    addVariable :: String -> Type -> Pos -> m UniqId
+    newEnv :: m ()
+instance (ClockedMonad m, ErrorableMonad m) => MonadWritingVars (StateT VarEnv m) where
+    addVariable name t p = do
         newId <- nextId
-        st <- get
-        put $ M.insert name (newId, t) st
+        usedNames <- gets names
+        when (name `elem` usedNames) (semErr p ("Variable " ++ name ++ " has been already declared"))
+        st <- gets ids
+        put $ VEnv {ids = (M.insert name (newId, t) st), names = (name:usedNames)}
         return newId
+    newEnv = do
+        oldEnv <- get
+        put $ VEnv (ids oldEnv) []
 instance (MonadTrans t, MonadWritingVars m, Monad (t m)) => MonadWritingVars (t m) where
-    addVariable name tp = lift $ addVariable name tp
+    addVariable name tp p = lift $ addVariable name tp p
+    newEnv = lift $ newEnv
 
 rwtStatement :: Type -> (Located LatteStmt) ->  StateT VarEnv (ReaderT FunEnv MyM) Statement
--- TODO: nazwy zmiennych nie moga sie powtarzac
 rwtStatement t (Loc p (LtBlock stmtL)) = do
+    newEnv
     (newStmtL, decls) <- runWriterT $ runReaderT (forM stmtL rwtStmtDecls) t
     return $ Blck decls newStmtL
 rwtStatement t (Loc p _) = do
@@ -108,11 +115,11 @@ rwtStmtDecls (Loc p (LtDBlock t decls)) = do
     where
         rwtDecl (Loc dP (LtDExpr name lexpr)) = do
             newE <- lift $ lift $ rwtExprTyped t lexpr
-            newId <- addVariable name t
+            newId <- addVariable name t dP
             tell [Decl t newId]
             return $ Ass newId newE
         rwtDecl (Loc dP (LtDEmpty name)) = do
-            newId <- addVariable name t
+            newId <- addVariable name t dP
             tell [Decl t newId]
             return Pass
 rwtStmtDecls lblock@(Loc p (LtBlock _)) = do
@@ -226,16 +233,15 @@ rwtExpr' (Loc p LtEFalse) = return (ConstBool False, LtBool)
 rwtExpr' (Loc p LtETrue) = return (ConstBool True, LtBool)
 rwtExpr' (Loc p (LtEInt i)) = return (ConstInt i, LtInt)
 rwtExpr' (Loc p (LtEId name)) = do
-    varMbe <- asks ((M.lookup name) . vEnv)
+    varMbe <- asks ((M.lookup name) . ids . vEnv)
     (varId, varT) <- case varMbe of {
         Nothing -> semErr p ("No such variable: " ++ name) ;
         Just res -> return res }
     return (EId varId, varT)
 
---TODO: nazwy argumentow nie moga sie powtarzac
 rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
     declL <- forM argL $ \ (Loc p (LtArg name argT)) -> do
-        argId <- addVariable name argT
+        argId <- addVariable name argT p
         return $ Decl argT argId
     newBlock <- rwtStatement retT lblock
     let returns = checkReturn newBlock
@@ -264,10 +270,11 @@ rwtProgram (LtTop lfL) = do
     fEnv <- execStateT (getFEnv lfL) M.empty
     let fEnvL = M.toList fEnv
     newFunL <- forM fEnvL $ \(_, (id, ltFun)) -> do
-        newFun <- runReaderT (evalStateT (rwtFunction ltFun) M.empty) (fEnv `M.union` (M.fromList functions))
+        newFun <- runReaderT (evalStateT (rwtFunction ltFun) (VEnv M.empty [])) (fEnv `M.union` (M.fromList functions))
         return (id, newFun)
     return $ Prog (M.fromList newFunL)
     where
+        -- TODO: napisac to ladniej
         fakeFunction fakeId name fType argTypes =
             (name, (fakeId, Loc (Pos 0 0) (LtFun name fType
                 ((\t -> Loc (Pos 0 0) (LtArg "" t)) `map` argTypes) (Loc (Pos 0 0) (LtBlock [])))))

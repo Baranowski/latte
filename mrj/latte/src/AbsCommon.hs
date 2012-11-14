@@ -1,5 +1,6 @@
 module AbsCommon where
 
+-- TODO: wypisywanie typu
 data LatteType = LtInt
                | LtString
                | LtBool

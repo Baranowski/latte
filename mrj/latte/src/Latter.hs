@@ -8,6 +8,7 @@ import System.IO (hPutStrLn, stderr)
 import Parser
 import Analyzer
 
+-- TODO: wypisywanie OK lub ERR
 compileFile :: String -> IO ()
 compileFile path = do
     readRes <- (try $ readFile path) :: IO (Either IOError String)
