@@ -1,0 +1,12 @@
+Program kompiluje się poleceniem:
+
+./latc <scieżka do pliku z kodem źródłowym>
+
+Kompilator przyjmuje dokładnie jeden argument.
+
+Wszystkie pliki źródłowe kompilatora znajdują się w podkatalogu src/
+
+Podkatalog build/ tworzony przez polecenie make, zawiera wszystkie pliki wygenerowane przy kompilowaniu kompilatora, poza samym plikiem wykonywalnym.
+
+
+Rozwiązanie korzysta wyłącznie ze standardowych bibliotek Haskella, w tym z biblioteki Parsec.
