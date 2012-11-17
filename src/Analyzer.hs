@@ -271,7 +271,7 @@ getFEnv fL = do
             id <- nextId
             put $ M.insert name (id, lfun) env
 
-rwtProgram (LtTop lfL) = do
+rwtProgram (LtTop lfL lcL) = do
     fEnv <- execStateT (getFEnv lfL) M.empty
     let fEnvL = M.toList fEnv
     newFunL <- forM fEnvL $ \(_, (id, ltFun)) -> do

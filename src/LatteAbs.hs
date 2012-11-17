@@ -7,7 +7,9 @@ data Pos = Pos { line :: Int, col :: Int}
 data Located a = Loc Pos a
     deriving (Eq, Show)
 
-data LatteTree = LtTop [Located LatteFun]
+data LatteTree = LtTop [Located LatteFun] [Located LatteClass]
+    deriving (Eq, Show)
+data LatteClass = LtClass LatteId [Located LatteCDecl] [Located LatteFun]
     deriving (Eq, Show)
 data LatteFun = LtFun LatteId LatteType [Located LatteArg] (Located LatteStmt)
     deriving (Eq, Show)
@@ -49,4 +51,6 @@ data LatteMulOp = Lmul
     deriving (Eq, Show)
 data LatteDecl = LtDExpr LatteId (Located LatteExpr)
                | LtDEmpty LatteId
+    deriving (Eq, Show)
+data LatteCDecl = LtCDecl LatteId LatteType
     deriving (Eq, Show)
