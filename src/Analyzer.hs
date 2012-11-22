@@ -72,15 +72,6 @@ instance (MonadTrans t, MonadWritingVars m, Monad (t m)) => MonadWritingVars (t 
     addVariable name tp p = lift $ addVariable name tp p
     newEnv = lift $ newEnv
 
-rwtStatement :: Type -> (Located LatteStmt) ->  WriterT [Declaration] (StateT VarEnv (ReaderT FunEnv MyM)) Statement
-rwtStatement t (Loc p (LtBlock stmtL)) = do
-    newEnv
-    newStmtL <- runReaderT (forM stmtL rwtStmtDecls) t
-    return $ Blck newStmtL
-rwtStatement t (Loc p _) = do
-    semErr p "Expecting block, got other kind of statement"
-    -- this should never happen
-
 rwtStmtDecls :: (Located LatteStmt) -> ReaderT Type (WriterT [Declaration] (StateT VarEnv (ReaderT FunEnv MyM))) Statement
 rwtStmtDecls (Loc p (LtSExpr lexpr)) = do
     (newE, _) <- lift $ lift $ rwtExpr lexpr
@@ -127,10 +118,10 @@ rwtStmtDecls (Loc p (LtDBlock t decls)) = do
             newId <- addVariable name t dP
             tell [Decl t newId]
             return Pass
-rwtStmtDecls lblock@(Loc p (LtBlock _)) = do
-    t <- ask
-    newBlock <- lift $ rwtStatement t lblock
-    return newBlock
+rwtStmtDecls lblock@(Loc p (LtBlock stmtL)) = do
+    newEnv
+    newStmtL <- forM stmtL rwtStmtDecls
+    return $ Blck newStmtL
 rwtStmtDecls (Loc p (LtReturn (Loc _ LtEVoid))) = do
     t <- ask
     when (t /= LtVoid) (semErr p "This function is expected to return a value")
@@ -248,7 +239,7 @@ rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
     argDecls <- forM argL $ \ (Loc p (LtArg name argT)) -> do
         argId <- addVariable name argT p
         return $ Decl argT argId
-    (newBlock, localDecls) <- runWriterT (rwtStatement retT lblock)
+    (newBlock, localDecls) <- runWriterT $ runReaderT (rwtStmtDecls lblock) retT
     let returns = checkReturn newBlock
     when (not returns && retT /= LtVoid) (semErr p ("Function " ++ name ++ " lacks 'return' statement"))
     -- TODO: splaszczanie zagniezdzenia blokow
