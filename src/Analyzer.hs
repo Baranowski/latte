@@ -72,11 +72,11 @@ instance (MonadTrans t, MonadWritingVars m, Monad (t m)) => MonadWritingVars (t 
     addVariable name tp p = lift $ addVariable name tp p
     newEnv = lift $ newEnv
 
-rwtStatement :: Type -> (Located LatteStmt) ->  StateT VarEnv (ReaderT FunEnv MyM) Statement
+rwtStatement :: Type -> (Located LatteStmt) ->  WriterT [Declaration] (StateT VarEnv (ReaderT FunEnv MyM)) Statement
 rwtStatement t (Loc p (LtBlock stmtL)) = do
     newEnv
-    (newStmtL, decls) <- runWriterT $ runReaderT (forM stmtL rwtStmtDecls) t
-    return $ Blck decls newStmtL
+    newStmtL <- runReaderT (forM stmtL rwtStmtDecls) t
+    return $ Blck newStmtL
 rwtStatement t (Loc p _) = do
     semErr p "Expecting block, got other kind of statement"
     -- this should never happen
@@ -116,7 +116,7 @@ rwtStmtDecls (Loc p (LtAss name lexpr)) = do
     return $ Ass varId newE
 rwtStmtDecls (Loc p (LtDBlock t decls)) = do
     newDs <- forM decls rwtDecl
-    return $ TmpFlatten newDs
+    return $ Blck newDs
     where
         rwtDecl (Loc dP (LtDExpr name lexpr)) = do
             newE <- lift $ lift $ rwtExprTyped t lexpr
@@ -129,7 +129,7 @@ rwtStmtDecls (Loc p (LtDBlock t decls)) = do
             return Pass
 rwtStmtDecls lblock@(Loc p (LtBlock _)) = do
     t <- ask
-    newBlock <- lift $ lift $ rwtStatement t lblock
+    newBlock <- lift $ rwtStatement t lblock
     return newBlock
 rwtStmtDecls (Loc p (LtReturn (Loc _ LtEVoid))) = do
     t <- ask
@@ -245,21 +245,20 @@ rwtExpr' (Loc p (LtEId name)) = do
     return (EId varId, varT)
 
 rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
-    declL <- forM argL $ \ (Loc p (LtArg name argT)) -> do
+    argDecls <- forM argL $ \ (Loc p (LtArg name argT)) -> do
         argId <- addVariable name argT p
         return $ Decl argT argId
-    newBlock <- rwtStatement retT lblock
+    (newBlock, localDecls) <- runWriterT (rwtStatement retT lblock)
     let returns = checkReturn newBlock
     when (not returns && retT /= LtVoid) (semErr p ("Function " ++ name ++ " lacks 'return' statement"))
     -- TODO: splaszczanie zagniezdzenia blokow
     -- TODO: przeniesienie deklaracji na najwyzszy poziom
-    return $ Func retT declL newBlock
+    return $ Func retT argDecls localDecls newBlock
     where
         checkReturn Ret = True
         checkReturn (RetExpr _) = True
-        checkReturn (Blck _ stmtL) = checkReturn `any` stmtL
         checkReturn (IfElse _ s1 s2) = (checkReturn s1) && (checkReturn s2)
-        checkReturn (TmpFlatten stmtL) = checkReturn `any` stmtL
+        checkReturn (Blck stmtL) = checkReturn `any` stmtL
         checkReturn _ = False
 
 getFEnv :: [Located LatteFun] -> StateT FunEnv MyM ()

@@ -9,14 +9,15 @@ type UniqId = String
 data Program = Prog (M.Map UniqId Function)
     deriving (Show, Eq)
 
-data Function = Func Type [Declaration] Statement
+-- typ, argumenty, zmienne lokalne, blok
+data Function = Func Type [Declaration] [Declaration] Statement
     deriving (Show, Eq)
 
 data Declaration = Decl Type UniqId
     deriving (Show, Eq)
 
 data Statement =
-      Blck [Declaration] [Statement]
+      Blck [Statement]
     | Ret
     | RetExpr Expression
     | Ass UniqId Expression
@@ -28,7 +29,6 @@ data Statement =
     | SExpr Expression
     | SEmpty
     | Pass
-    | TmpFlatten [Statement]
     deriving (Show, Eq)
 
 data Expression =
