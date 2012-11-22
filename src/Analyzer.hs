@@ -28,14 +28,14 @@ instance (MonadTrans t, ErrorableMonad m, Monad (t m)) => ErrorableMonad (t m) w
     semErr p s = lift $ semErr p s
 
 class (Monad m) => ClockedMonad m where
-    nextId :: m Int
+    nextId :: String -> m String
 instance ClockedMonad MyM where
-    nextId = do
+    nextId s = do
         n <- get
         put $ n+1
-        return $ n+1
+        return $ s ++ "__" ++ (show (n+1))
 instance (MonadTrans t, ClockedMonad m, Monad (t m)) => ClockedMonad (t m) where
-    nextId = lift nextId
+    nextId s = lift $ nextId s
 
 class (Monad m) => MonadWithVars m where
     lookupVar :: String -> Pos -> m (UniqId, Type)
@@ -59,7 +59,7 @@ class (Monad m) => MonadWritingVars m where
     newEnv :: m ()
 instance (ClockedMonad m, ErrorableMonad m) => MonadWritingVars (StateT VarEnv m) where
     addVariable name t p = do
-        newId <- nextId
+        newId <- nextId name
         usedNames <- gets names
         when (name `elem` usedNames) (semErr p ("Variable " ++ name ++ " has been already declared"))
         st <- gets ids
@@ -268,7 +268,7 @@ getFEnv fL = do
         addFun lfun@(Loc p f@(LtFun name _ _ _)) = do
             env <- get
             when (name `M.member` env) (semErr p $ "Another declaration of function " ++ name)
-            id <- nextId
+            id <- nextId name
             put $ M.insert name (id, lfun) env
 
 rwtProgram (LtTop lfL) = do
@@ -281,14 +281,14 @@ rwtProgram (LtTop lfL) = do
     where
         -- TODO: napisac to ladniej
         fakeFunction fakeId name fType argTypes =
-            (name, (fakeId, Loc (Pos 0 0) (LtFun name fType
+            (name, ((name ++ "__" ++ fakeId) , Loc (Pos 0 0) (LtFun name fType
                 ((\t -> Loc (Pos 0 0) (LtArg "" t)) `map` argTypes) (Loc (Pos 0 0) (LtBlock [])))))
         functions = [
-            (fakeFunction (-1) "printInt" LtInt [LtInt]),
-            (fakeFunction (-2) "printString" LtString [LtString]),
-            (fakeFunction (-3) "error" LtVoid []),
-            (fakeFunction (-4) "readInt" LtInt []),
-            (fakeFunction (-5) "readString" LtString []) ]
+            (fakeFunction "m1" "printInt" LtInt [LtInt]),
+            (fakeFunction "m2" "printString" LtString [LtString]),
+            (fakeFunction "m3" "error" LtVoid []),
+            (fakeFunction "m4" "readInt" LtInt []),
+            (fakeFunction "m5" "readString" LtString []) ]
 
 rewriteProgram lt = evalStateT (rwtProgram lt) 0
     

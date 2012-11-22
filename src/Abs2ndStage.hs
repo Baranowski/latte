@@ -4,7 +4,7 @@ import qualified Data.Map as M
 
 import AbsCommon
 
-type UniqId = Int
+type UniqId = String
 
 data Program = Prog (M.Map UniqId Function)
     deriving (Show, Eq)
