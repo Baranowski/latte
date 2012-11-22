@@ -114,10 +114,8 @@ rwtStmtDecls (Loc p (LtDBlock t decls)) = do
             newId <- addVariable name t dP
             tell [Decl t newId]
             return $ Ass newId newE
-        rwtDecl (Loc dP (LtDEmpty name)) = do
-            newId <- addVariable name t dP
-            tell [Decl t newId]
-            return Pass
+        rwtDecl (Loc dP (LtDEmpty name)) =
+            rwtDecl (Loc dP (LtDExpr name (Loc (Pos 0 0) (defaultValue t))))
 rwtStmtDecls lblock@(Loc p (LtBlock stmtL)) = do
     newEnv
     newStmtL <- forM stmtL rwtStmtDecls
@@ -132,6 +130,12 @@ rwtStmtDecls (Loc p (LtReturn lexpr)) = do
     return $ RetExpr newE
 rwtStmtDecls (Loc p (LtPass)) = do
     return Pass
+
+defaultValue :: Type -> LatteExpr
+defaultValue LtInt = LtEInt 0
+defaultValue LtString = LtEStr ""
+defaultValue LtBool = LtEFalse
+defined LtVoid = LtEVoid
 
 rwtExprTyped :: Type -> (Located LatteExpr) -> StateT VarEnv (ReaderT FunEnv MyM) Expression
 rwtExprTyped t lexpr@(Loc p expr) = do
@@ -243,7 +247,6 @@ rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
     let returns = checkReturn newBlock
     when (not returns && retT /= LtVoid) (semErr p ("Function " ++ name ++ " lacks 'return' statement"))
     -- TODO: splaszczanie zagniezdzenia blokow
-    -- TODO: przeniesienie deklaracji na najwyzszy poziom
     return $ Func retT argDecls localDecls newBlock
     where
         checkReturn Ret = True
