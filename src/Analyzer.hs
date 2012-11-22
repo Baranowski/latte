@@ -251,6 +251,8 @@ rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
     newBlock <- rwtStatement retT lblock
     let returns = checkReturn newBlock
     when (not returns && retT /= LtVoid) (semErr p ("Function " ++ name ++ " lacks 'return' statement"))
+    -- TODO: splaszczanie zagniezdzenia blokow
+    -- TODO: przeniesienie deklaracji na najwyzszy poziom
     return $ Func retT declL newBlock
     where
         checkReturn Ret = True

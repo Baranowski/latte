@@ -3,13 +3,14 @@ module Main where
 import Control.Exception (try)
 import System.Environment (getProgName, getArgs)
 import System.Exit (exitSuccess, exitFailure)
-import System.IO (hPutStrLn, stderr)
+import System.IO (hPutStrLn, stderr, stdout)
 
 import Parser
 import Analyzer
+import BackendJasmin
 
-compileFile :: String -> IO ()
-compileFile path = do
+compileFile :: String -> String -> IO ()
+compileFile path execPath = do
     readRes <- (try $ readFile path) :: IO (Either IOError String)
     case readRes of
         Left err -> do
@@ -26,14 +27,21 @@ compileFile path = do
                     hPutStrLn stderr $ show err
                     exitFailure
                 Right full -> do
-                    hPutStrLn stderr "OK"
+                    compileRes <- compileJasmin full execPath
+                    case compileRes of
+                        Left err -> do
+                            hPutStrLn stderr "ERROR"
+                            hPutStrLn stderr $ show err
+                        Right _ -> do
+                            hPutStrLn stdout "OK"
+
 
 main = do
     args <- getArgs
     case args of
-        [path] -> compileFile path
+        [path, execPath] -> compileFile path execPath
         otherwise -> do
             progName <- getProgName
             hPutStrLn stderr $ "Wrong arguments. Expected:\n"
-                ++ progName ++ " [plik zrodlowy]"
+                ++ progName ++ " [source file] [executable]"
             exitFailure
