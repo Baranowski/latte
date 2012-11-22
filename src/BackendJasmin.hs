@@ -1,7 +1,9 @@
 module BackendJasmin(compileJasmin) where
 
+import Control.Monad.Writer
+import qualified Data.Map as M
+
 import Abs2ndStage
-import Data.Map as M
 
 data CmpError = CErr String
 instance Show CmpError where
@@ -9,8 +11,8 @@ instance Show CmpError where
 
 addLn s = tell [s]
 
-generateMethod :: Function -> Writer [String] ()
-generateMethod func = do
+generateFunction :: Function -> Writer [String] ()
+generateFunction func = do
     -- TODO
     return ()
 
@@ -20,9 +22,10 @@ generateProgram (Prog funcs) = do
     addLn ".super java/lang/Object"
     forM_ (M.toList funcs) generateMethod
     where
+        generateMethod :: (UniqId, Function) -> Writer [String] ()
         generateMethod (mId, func) = do
-            addLn $ ".method static public" ++ mid
-            censor (map (\s -> "    " ++ s)) (generateMethod func)
+            addLn $ ".method static public " ++ mId
+            censor (map (\s -> "    " ++ s)) (generateFunction func)
             addLn $ ".end method"
 
 compileJasmin :: Program -> String -> IO (Either CmpError ())
