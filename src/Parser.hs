@@ -54,26 +54,15 @@ loc p = do
     pos <- mypos
     res <- p
     return $ Loc pos res
-
-manyInterleaved1 p1 p2 = do
-    xs <- many1 (try (p1 >>= return . Left) <|> try (p2 >>= return . Right))
-    let lL = foldl getLs [] xs
-    let rL = foldl getRs [] xs
-    return (lL, rL)
-    where
-        getLs l (Left x) = x:l
-        getLs l _ = l
-        getRs l (Right x) = x:l
-        getRs l _ = l
 -- Highest-level parsers
 
 topParser :: LtParser st LatteTree
 topParser = do
     spaces
     many (comment >> spaces)
-    (fL, cL) <- manyInterleaved1 (mylex $ loc funParser) (mylex $ loc classParser)
+    funL <- mylex $ many1 $ loc funParser
     eof
-    return $ LtTop fL cL
+    return $ LtTop funL
 
 idParser :: LtParser st LatteId
 idParser = try $ do
@@ -81,6 +70,7 @@ idParser = try $ do
     if word `elem` reservedKeywords
         then unexpected $ "reserved keyword: \"" ++ word ++ "\""
         else return word
+
 
 funParser :: LtParser st LatteFun
 funParser = do
@@ -90,22 +80,6 @@ funParser = do
 	((loc argParser) `sepBy` (spaces >> (char ',') >> spaces))
     body <- mylex $ loc blockParser
     return $ LtFun name resT argL body
-
-classParser :: LtParser st LatteClass
-classParser = do
-    mylex $ keyword "class"
-    name <- mylex idParser
-    mylex $ char '{'
-    (decls, methods) <- manyInterleaved1 (mylex $ loc cDeclParser) (mylex $ loc funParser)
-    mylex $ char '}'
-    return $ LtClass name decls methods
-
-cDeclParser :: LtParser st LatteCDecl
-cDeclParser = do
-    t <- mylex typeParser
-    name <- mylex idParser
-    mylex $ char ';'
-    return $ LtCDecl name t
 
 typeParser :: LtParser st LatteType
 typeParser = do
