@@ -1,7 +1,9 @@
+{-# LANGUAGE FlexibleInstances #-}
 module BackendJasmin(compileJasmin) where
 
 import Control.Monad.Writer
 import Control.Monad.Reader
+import Control.Monad.State
 import qualified Data.Map as M
 
 import AbsCommon
@@ -14,29 +16,62 @@ data CmpError = CErr String
 instance Show CmpError where
     show (CErr s) = s
 
+class Errorable m where
+    cErr :: String -> m a
+instance Errorable (Either CmpError) where
+    cErr s = Left (CErr s)
+instance (MonadTrans t, Errorable m, Monad m) => Errorable (t m) where
+    cErr s = lift $ cErr s
+
+type BasicMonad = WriterT [String] (Either CmpError)
+type StmtMonad = StateT Int (ReaderT Env BasicMonad)
+
 addLn s = tell [s]
 
 -- Returns instruction prefix depending on the type
 pI :: Type -> String
-pI LtString s = "a"
-pI _ s = "i"
+pI LtString = "a"
+pI LtVoid = ""
+pI LtInt = "i"
+pI LtBool = "i"
 
-genStmt :: Statement -> ReaderT Env (Writer [String]) ()
+newLabel :: (Monad m) => StateT Int m String
+newLabel = do
+    n <- get
+    put (n+1)
+    let sN = (show n)
+    let num = ((\_->'0') `map` [(length sN)..3]) ++ sN
+    return $ "Label__" ++ num
+
+myLookup :: (Errorable m, Monad m) => UniqId-> M.Map UniqId a -> m a
+myLookup id m = do
+    let resMbe = M.lookup id m
+    res <- case resMbe of
+        Nothing -> cErr $ "Cannot find entity: " ++ id
+        Just x -> return x
+    return res
+
+genStmt :: Statement -> StmtMonad ()
 genStmt (Blck stmts) = forM_ stmts genStmt
 genStmt Ret = addLn "return"
 genStmt (RetExpr e) = do
     genExpr e
     globalT <- asks gT
-    addLn (pI globalT "return")
+    addLn $ (pI globalT) ++  "return"
 genStmt (Ass id e) = do
     genExpr e
-    var <- asks vars
+    vs <- asks vars
+    var <- myLookup id vs
     addLn $ (pI (vT var)) ++ "store_" ++ (show (reg var))
 genStmt (Incr id) = do
-    n <- asks (reg . (M.lookup id) . vars)
+    vs <- asks vars
+    var <- myLookup id vs
+    let n = reg var
     addLn $ "iinc " ++ (show n) ++ " 1"
 genStmt (Decr id) = do
-    n <- asks (reg . (M.lookup id) . vars)
+    vs <- asks vars
+    var <- myLookup id vs
+    let n = reg var
     addLn $ "iinc " ++ (show n) ++ " -1"
 genStmt (If e s) = do
     genExpr e
@@ -68,7 +103,7 @@ genStmt (SExpr e) = do
     addLn "pop"
 genStmt Pass = return ()
 
-genExpr :: Expression -> ReaderT Env (Writer [String]) ()
+genExpr :: Expression -> StmtMonad ()
 genExpr (Or es) = do
     lTrue <- newLabel
     lEnd <- newLabel
@@ -133,12 +168,13 @@ genExpr (Neg e) = genExpr (Arithm '-' (ConstInt 0) e)
 genExpr (Concat e1 e2) = genExpr (App "strConcat" [e1,e2])
 genExpr (App id es) = do
     forM_ es genExpr
-    func <- asks ( (M.lookup id) . funs )
+    fs <- asks funs
+    func <- myLookup id fs
     let (Func fT args _ _) = func
     addLn $ "invokestatic " ++ (funcDesc id args fT)
     where
         funcDesc id args t = "MainClass/" ++ id ++ "(" ++
-            (concat (map (\Decl t _ -> typeDesc t) args)) ++ 
+            (concat (map (\(Decl t _) -> typeDesc t) args)) ++ 
             ")" ++ (typeDesc t)
 genExpr (ConstBool False) = addLn "iconst_0"
 genExpr (ConstBool True) = addLn "iconst_1"
@@ -150,7 +186,8 @@ genExpr (ConstStr s) = addLn $ "ldc \"" ++ (esc s) ++ "\""
         escCh '\\' = "\\\\"
         escCh c = [c]
 genExpr (EId id) = do
-    var <- asks ((M.lookup id) . vars)
+    vs <- asks vars
+    var <- myLookup id vs
     addLn $ (pI (vT var)) ++ "laod_" ++ (show $ reg var)
 
 typeDesc LtString = "Ljava/lang/String;"
@@ -159,7 +196,7 @@ typeDesc LtInt = "I"
 typeDesc LtBool = "I"
 
 
-generateFunction :: M.Map UniqId Function -> Function -> Writer [String] ()
+generateFunction :: M.Map UniqId Function -> Function -> BasicMonad ()
 generateFunction funcs (Func t args decls stmt) = do
     let argsN = (length args)
     let newArgs = rewriteDecl `map` (args `zip` [0..])
@@ -167,17 +204,18 @@ generateFunction funcs (Func t args decls stmt) = do
     forM (reverse newArgs) (\(_, (Var n t)) ->
         addLn $ (pI t) ++ "store_" ++ (show n))
     let vars = M.fromList (newArgs ++ newLocals)
-    runReaderT (genStmt stmt) (Env t vars funcs)
+    runReaderT (runStateT (genStmt stmt) 0) (Env t vars funcs)
+    return ()
     where
         rewriteDecl ((Decl t id), n) = (id, Var n t)
 
-generateProgram :: Program -> Writer [String] ()
+generateProgram :: Program -> BasicMonad ()
 generateProgram (Prog funcs) = do
     addLn ".class MainClass"
     addLn ".super java/lang/Object"
     forM_ (M.toList funcs) generateMethod
     where
-        generateMethod :: (UniqId, Function) -> Writer [String] ()
+        generateMethod :: (UniqId, Function) -> BasicMonad ()
         generateMethod (mId, func) = do
             addLn $ ".method static public " ++ mId
             censor (map (\s -> "    " ++ s)) (generateFunction funcs func)
