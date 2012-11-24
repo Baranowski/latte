@@ -8,7 +8,7 @@ import AbsCommon
 import Abs2ndStage
 
 data Var = Var { reg :: Int, vT :: Type} 
-data Env = Env { gT :: Type, vars :: M.Map UniqId Var}
+data Env = Env { gT :: Type, vars :: M.Map UniqId Var, funs :: M.Map UniqId Function }
 
 data CmpError = CErr String
 instance Show CmpError where
@@ -159,15 +159,15 @@ typeDesc LtInt = "I"
 typeDesc LtBool = "I"
 
 
-generateFunction :: Function -> Writer [String] ()
-generateFunction (Func t args decls stmt) = do
+generateFunction :: M.Map UniqId Function -> Function -> Writer [String] ()
+generateFunction funcs (Func t args decls stmt) = do
     let argsN = (length args)
     let newArgs = rewriteDecl `map` (args `zip` [0..])
     let newLocals = rewriteDecl `map` (args `zip` [argsN..])
     forM (reverse newArgs) (\(_, (Var n t)) ->
         addLn $ (pI t) ++ "store_" ++ (show n))
     let vars = M.fromList (newArgs ++ newLocals)
-    runReaderT (genStmt stmt) (Env t vars)
+    runReaderT (genStmt stmt) (Env t vars funcs)
     where
         rewriteDecl ((Decl t id), n) = (id, Var n t)
 
@@ -180,7 +180,7 @@ generateProgram (Prog funcs) = do
         generateMethod :: (UniqId, Function) -> Writer [String] ()
         generateMethod (mId, func) = do
             addLn $ ".method static public " ++ mId
-            censor (map (\s -> "    " ++ s)) (generateFunction func)
+            censor (map (\s -> "    " ++ s)) (generateFunction funcs func)
             addLn $ ".end method"
 
 compileJasmin :: Program -> String -> IO (Either CmpError ())
