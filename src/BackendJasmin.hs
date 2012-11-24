@@ -8,6 +8,7 @@ import qualified Data.Map as M
 
 import AbsCommon
 import Abs2ndStage
+import Builtins
 
 data Var = Var { reg :: Int, vT :: Type} 
 data Env = Env { gT :: Type, vars :: M.Map UniqId Var, funs :: M.Map UniqId Function }
@@ -218,8 +219,9 @@ generateProgram (Prog funcs) = do
         generateMethod :: (UniqId, Function) -> BasicMonad ()
         generateMethod (mId, func) = do
             addLn $ ".method static public " ++ mId
-            censor (map (\s -> "    " ++ s)) (generateFunction funcs func)
+            censor (map (\s -> "    " ++ s)) (generateFunction fEnv func)
             addLn $ ".end method"
+        fEnv = funcs `M.union` (M.fromList builtins)
 
 compileJasmin :: Program -> String -> IO (Either CmpError ())
 compileJasmin prog execPath = do

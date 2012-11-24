@@ -11,6 +11,7 @@ import Control.Monad.State
 import AbsCommon
 import LatteAbs
 import Abs2ndStage
+import Builtins
 
 data SemError = SErr Pos String
 instance Show SemError where
@@ -270,20 +271,19 @@ rwtProgram (LtTop lfL) = do
     fEnv <- execStateT (getFEnv lfL) M.empty
     let fEnvL = M.toList fEnv
     newFunL <- forM fEnvL $ \(_, (id, ltFun)) -> do
-        newFun <- runReaderT (evalStateT (rwtFunction ltFun) (VEnv M.empty [])) (fEnv `M.union` (M.fromList functions))
+        newFun <- runReaderT (evalStateT (rwtFunction ltFun) (VEnv M.empty [])) (fEnv `M.union` (M.fromList builtinFuncs))
         return (id, newFun)
     return $ Prog (M.fromList newFunL)
     where
-        -- TODO: napisac to ladniej
-        fakeFunction fakeId name fType argTypes =
-            (name, ((name ++ "__" ++ fakeId) , Loc (Pos 0 0) (LtFun name fType
-                ((\t -> Loc (Pos 0 0) (LtArg "" t)) `map` argTypes) (Loc (Pos 0 0) (LtBlock [])))))
-        functions = [
-            (fakeFunction "m1" "printInt" LtInt [LtInt]),
-            (fakeFunction "m2" "printString" LtString [LtString]),
-            (fakeFunction "m3" "error" LtVoid []),
-            (fakeFunction "m4" "readInt" LtInt []),
-            (fakeFunction "m5" "readString" LtString []) ]
+        builtinFuncs = map fakeFunction builtins
+        fakeFunction (name, Func fType args _ _) =
+            (name, (name, Loc (Pos 0 0) (LtFun
+                        name
+                        fType
+                        (map
+                            (\(Decl dT dN) -> Loc (Pos 0 0) (LtArg dN dT))
+                            args)
+                        (Loc (Pos 0 0) (LtBlock [])))))
 
 rewriteProgram lt = evalStateT (rwtProgram lt) 0
     
