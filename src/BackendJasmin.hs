@@ -28,6 +28,10 @@ type BasicMonad = WriterT [String] (Either CmpError)
 type StmtMonad = StateT Int (ReaderT Env BasicMonad)
 
 addLn s = tell [s]
+-- Add instruction
+addI s = addLn $ "    " ++ s
+-- Add label
+addL s = addLn $ "  " ++ s ++ ":"
 
 -- Returns instruction prefix depending on the type
 pI :: Type -> String
@@ -54,54 +58,54 @@ myLookup id m = do
 
 genStmt :: Statement -> StmtMonad ()
 genStmt (Blck stmts) = forM_ stmts genStmt
-genStmt Ret = addLn "return"
+genStmt Ret = addI "return"
 genStmt (RetExpr e) = do
     genExpr e
     globalT <- asks gT
-    addLn $ (pI globalT) ++  "return"
+    addI $ (pI globalT) ++  "return"
 genStmt (Ass id e) = do
     genExpr e
     vs <- asks vars
     var <- myLookup id vs
-    addLn $ (pI (vT var)) ++ "store_" ++ (show (reg var))
+    addI $ (pI (vT var)) ++ "store_" ++ (show (reg var))
 genStmt (Incr id) = do
     vs <- asks vars
     var <- myLookup id vs
     let n = reg var
-    addLn $ "iinc " ++ (show n) ++ " 1"
+    addI $ "iinc " ++ (show n) ++ " 1"
 genStmt (Decr id) = do
     vs <- asks vars
     var <- myLookup id vs
     let n = reg var
-    addLn $ "iinc " ++ (show n) ++ " -1"
+    addI $ "iinc " ++ (show n) ++ " -1"
 genStmt (If e s) = do
     genExpr e
     l <- newLabel
-    addLn $ "ifeq " ++ l
+    addI $ "ifeq " ++ l
     genStmt s
-    addLn $ l ++ ":"
+    addL $ l
 genStmt (IfElse e s1 s2) = do
     genExpr e
     lElse <- newLabel
     lFi <- newLabel
-    addLn $ "ifeq " ++ lElse
+    addI $ "ifeq " ++ lElse
     genStmt s1
-    addLn $ "goto " ++ lFi
-    addLn $ lElse ++ ":"
+    addI $ "goto " ++ lFi
+    addL $ lElse
     genStmt s2
-    addLn $ lFi ++ ":"
+    addL $ lFi
 genStmt (While e s) = do
     lWhile <- newLabel
     lDone <- newLabel
-    addLn $ lWhile ++ ":"
+    addL $ lWhile
     genExpr e
-    addLn $ "ifeq " ++ lDone
+    addI $ "ifeq " ++ lDone
     genStmt s
-    addLn $ "goto " ++ lWhile
-    addLn $ lDone ++ ":"
+    addI $ "goto " ++ lWhile
+    addL $ lDone
 genStmt (SExpr e) = do
     genExpr e
-    addLn "pop"
+    addI "pop"
 genStmt Pass = return ()
 
 genExpr :: Expression -> StmtMonad ()
@@ -109,39 +113,39 @@ genExpr (Or es) = do
     lTrue <- newLabel
     lEnd <- newLabel
     forM_ es (genOrAtom lTrue)
-    addLn "iconst_0"
-    addLn $ "goto " ++ lEnd
-    addLn $ lTrue ++ ":"
-    addLn "iconst_1"
-    addLn $ lEnd ++ ":"
+    addI "iconst_0"
+    addI $ "goto " ++ lEnd
+    addL $ lTrue
+    addI "iconst_1"
+    addL $ lEnd
     where
         genOrAtom lTrue e = do
             genExpr e
-            addLn $ "ifne " ++ lTrue
+            addI $ "ifne " ++ lTrue
 genExpr (And es) = do
     lFalse <- newLabel
     lEnd <- newLabel
     forM_ es (genAndAtom lFalse)
-    addLn "iconst_1"
-    addLn $ "goto " ++ lEnd
-    addLn $ lFalse ++ ":"
-    addLn $ "iconst_0"
-    addLn $ lEnd ++ ":"
+    addI "iconst_1"
+    addI $ "goto " ++ lEnd
+    addL $ lFalse
+    addI $ "iconst_0"
+    addL $ lEnd
     where
         genAndAtom lFalse e = do
             genExpr e
-            addLn $ "ifeq " ++ lFalse
+            addI $ "ifeq " ++ lFalse
 genExpr (IntComp rel e1 e2) = do
     lTrue <- newLabel
     lEnd <- newLabel
     genExpr e1
     genExpr e2
-    addLn $ "if_icmp" ++ (relToInstr rel) ++ " " ++ lTrue
-    addLn "iconst_0"
-    addLn $ "goto " ++ lEnd
-    addLn $ lTrue ++ ":"
-    addLn "iconst_1"
-    addLn $ lEnd ++ ":"
+    addI $ "if_icmp" ++ (relToInstr rel) ++ " " ++ lTrue
+    addI "iconst_0"
+    addI $ "goto " ++ lEnd
+    addL $ lTrue
+    addI "iconst_1"
+    addL $ lEnd
     where
         relToInstr Rlt = "lt"
         relToInstr Rle = "le"
@@ -163,7 +167,7 @@ genExpr (Arithm ch e1 e2) = do
             '-' -> "isub"
             '*' -> "imul"
             '/' -> "idiv"
-    addLn op
+    addI op
 genExpr (Not e) = genExpr (Arithm '-' (ConstInt 1) e)
 genExpr (Neg e) = genExpr (Arithm '-' (ConstInt 0) e)
 genExpr (Concat e1 e2) = genExpr (App "strConcat" [e1,e2])
@@ -172,15 +176,15 @@ genExpr (App id es) = do
     fs <- asks funs
     func <- myLookup id fs
     let (Func fT args _ _) = func
-    addLn $ "invokestatic " ++ (funcDesc id args fT)
+    addI $ "invokestatic " ++ (funcDesc id args fT)
     where
         funcDesc id args t = "MainClass/" ++ id ++ "(" ++
             (concat (map (\(Decl t _) -> typeDesc t) args)) ++ 
             ")" ++ (typeDesc t)
-genExpr (ConstBool False) = addLn "iconst_0"
-genExpr (ConstBool True) = addLn "iconst_1"
-genExpr (ConstInt n) = addLn $ "ldc " ++ (show n)
-genExpr (ConstStr s) = addLn $ "ldc \"" ++ (esc s) ++ "\""
+genExpr (ConstBool False) = addI "iconst_0"
+genExpr (ConstBool True) = addI "iconst_1"
+genExpr (ConstInt n) = addI $ "ldc " ++ (show n)
+genExpr (ConstStr s) = addI $ "ldc \"" ++ (esc s) ++ "\""
     where
         esc s = concat (map escCh s)
         escCh '"' = "\""
@@ -189,7 +193,7 @@ genExpr (ConstStr s) = addLn $ "ldc \"" ++ (esc s) ++ "\""
 genExpr (EId id) = do
     vs <- asks vars
     var <- myLookup id vs
-    addLn $ (pI (vT var)) ++ "laod_" ++ (show $ reg var)
+    addI $ (pI (vT var)) ++ "laod_" ++ (show $ reg var)
 
 typeDesc LtString = "Ljava/lang/String;"
 typeDesc LtVoid = "V"
@@ -203,7 +207,7 @@ generateFunction funcs (Func t args decls stmt) = do
     let newArgs = rewriteDecl `map` (args `zip` [0..])
     let newLocals = rewriteDecl `map` (decls `zip` [argsN..])
     forM (reverse newArgs) (\(_, (Var n t)) ->
-        addLn $ (pI t) ++ "store_" ++ (show n))
+        addI $ (pI t) ++ "store_" ++ (show n))
     let vars = M.fromList (newArgs ++ newLocals)
     runReaderT (runStateT (genStmt stmt) 0) (Env t vars funcs)
     return ()
@@ -219,7 +223,7 @@ generateProgram (Prog funcs) = do
         generateMethod :: (UniqId, Function) -> BasicMonad ()
         generateMethod (mId, func) = do
             addLn $ ".method static public " ++ mId
-            censor (map (\s -> "    " ++ s)) (generateFunction fEnv func)
+            generateFunction fEnv func
             addLn $ ".end method"
         fEnv = funcs `M.union` (M.fromList builtins)
 
