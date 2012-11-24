@@ -223,4 +223,9 @@ generateProgram (Prog funcs) = do
 
 compileJasmin :: Program -> String -> IO (Either CmpError ())
 compileJasmin prog execPath = do
-    return $ Right ()
+    let res = execWriterT (generateProgram prog)
+    case res of
+        Left err -> return $ Left err
+        Right lines -> do
+            forM_ lines putStrLn
+            return $ Right ()

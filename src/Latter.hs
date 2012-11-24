@@ -27,6 +27,7 @@ compileFile path execPath = do
                     hPutStrLn stderr $ show err
                     exitFailure
                 Right full -> do
+                    putStrLn (show full)
                     compileRes <- compileJasmin full execPath
                     case compileRes of
                         Left err -> do
