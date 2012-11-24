@@ -200,7 +200,7 @@ generateFunction :: M.Map UniqId Function -> Function -> BasicMonad ()
 generateFunction funcs (Func t args decls stmt) = do
     let argsN = (length args)
     let newArgs = rewriteDecl `map` (args `zip` [0..])
-    let newLocals = rewriteDecl `map` (args `zip` [argsN..])
+    let newLocals = rewriteDecl `map` (decls `zip` [argsN..])
     forM (reverse newArgs) (\(_, (Var n t)) ->
         addLn $ (pI t) ++ "store_" ++ (show n))
     let vars = M.fromList (newArgs ++ newLocals)
