@@ -9,6 +9,7 @@ import qualified Data.Map as M
 import AbsCommon
 import Abs2ndStage
 import Builtins
+import BackendJasminBuiltins
 
 data Var = Var { reg :: Int, vT :: Type} 
 data Env = Env { gT :: Type, vars :: M.Map UniqId Var, funs :: M.Map UniqId Function }
@@ -218,6 +219,7 @@ generateProgram :: Program -> BasicMonad ()
 generateProgram (Prog funcs) = do
     addLn ".class MainClass"
     addLn ".super java/lang/Object"
+    tell builtinMethods
     forM_ (M.toList funcs) generateMethod
     where
         generateMethod :: (UniqId, Function) -> BasicMonad ()
