@@ -59,7 +59,7 @@ myLookup id m = do
 
 genStmt :: Statement -> StmtMonad ()
 genStmt (Blck stmts) = forM_ stmts genStmt
-genStmt Ret = addI "return"
+genStmt Ret = (addI "ldc 0") >> (addI "ireturn")
 genStmt (RetExpr e) = do
     genExpr e
     globalT <- asks gT
@@ -193,13 +193,13 @@ genExpr (ConstStr s) = addI $ "ldc \"" ++ (esc s) ++ "\""
 genExpr (EId id) = do
     vs <- asks vars
     var <- myLookup id vs
-    addI $ (pI (vT var)) ++ "laod_" ++ (show $ reg var)
+    addI $ (pI (vT var)) ++ "load_" ++ (show $ reg var)
 
 funcTypeDesc args t = "(" ++ 
     (concat (map (\(Decl t _) -> typeDesc t) args)) ++ 
     ")" ++ (typeDesc t)
 typeDesc LtString = "Ljava/lang/String;"
-typeDesc LtVoid = "V"
+typeDesc LtVoid = "I"
 typeDesc LtInt = "I"
 typeDesc LtBool = "I"
 
@@ -228,6 +228,10 @@ generateProgram (Prog funcs) = do
         generateMethod :: (UniqId, Function) -> BasicMonad ()
         generateMethod (mId, func@(Func t args _ _)) = do
             addLn $ ".method static public " ++ mId ++ (funcTypeDesc args t)
+            -- TODO
+            addLn $ ".limit locals 10"
+            -- TODO
+            addLn $ ".limit stack 20"
             generateFunction fEnv func
             addLn $ ".end method"
         fEnv = funcs `M.union` (M.fromList builtins)
