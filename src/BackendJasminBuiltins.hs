@@ -1,5 +1,7 @@
 module BackendJasminBuiltins where
 
+classNameMacro = "*CLASS_NAME*"
+
 builtinMethods = [
     ".method public <init>()V",
     ".limit locals 10",
@@ -141,7 +143,7 @@ mainMethod = [
     ".method public static main([Ljava/lang/String;)V",
     ".limit locals 10",
     ".limit stack 20",
-    "    invokestatic MainClass/main__()I",
+    "    invokestatic " ++ classNameMacro ++ "/main__()I",
     "    invokestatic java/lang/System/exit(I)V",
     "    return",
     ".end method"]

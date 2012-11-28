@@ -44,5 +44,5 @@ main = do
         otherwise -> do
             progName <- getProgName
             hPutStrLn stderr $ "Wrong arguments. Expected:\n"
-                ++ progName ++ " [source file] [executable]"
+                ++ progName ++ " [source file] [class name]"
             exitFailure

@@ -5,6 +5,12 @@ import Control.Monad.Writer
 import Control.Monad.Reader
 import Control.Monad.State
 import qualified Data.Map as M
+import Data.List.Utils
+import System.IO.Temp(openTempFile)
+import System.Directory(getTemporaryDirectory, removeFile)
+import System.IO(hPutStrLn, stdout, hClose)
+import System.Cmd(rawSystem)
+import System.Exit(ExitCode(..))
 
 import AbsCommon
 import Abs2ndStage
@@ -12,7 +18,7 @@ import Builtins
 import BackendJasminBuiltins
 
 data Var = Var { reg :: Int, vT :: Type} 
-data Env = Env { gT :: Type, vars :: M.Map UniqId Var, funs :: M.Map UniqId Function }
+data Env = Env { gT :: Type, vars :: M.Map UniqId Var, funs :: M.Map UniqId Function, classN :: String }
 
 data CmpError = CErr String
 instance Show CmpError where
@@ -177,10 +183,10 @@ genExpr (App id es) = do
     fs <- asks funs
     func <- myLookup id fs
     let (Func fT args _ _) = func
-    addI $ "invokestatic " ++ (funcDesc id args fT)
+    className <- asks classN
+    addI $ "invokestatic " ++ className ++ "/" ++ (funcDesc id args fT)
     where
-        funcDesc id args t = "MainClass/" ++ id ++
-            (funcTypeDesc args t)
+        funcDesc id args t = id ++ (funcTypeDesc args t)
 genExpr (ConstBool False) = addI "iconst_0"
 genExpr (ConstBool True) = addI "iconst_1"
 genExpr (ConstInt n) = addI $ "ldc " ++ (show n)
@@ -204,26 +210,26 @@ typeDesc LtInt = "I"
 typeDesc LtBool = "I"
 
 
-generateFunction :: M.Map UniqId Function -> Function -> BasicMonad ()
-generateFunction funcs (Func t args decls stmt) = do
+generateFunction :: M.Map UniqId Function -> Function -> String -> BasicMonad ()
+generateFunction funcs (Func t args decls stmt) className = do
     let argsN = (length args)
     let newArgs = rewriteDecl `map` (args `zip` [0..])
     let newLocals = rewriteDecl `map` (decls `zip` [argsN..])
     forM (reverse newArgs) (\(_, (Var n t)) ->
         addI $ (pI t) ++ "store_" ++ (show n))
     let vars = M.fromList (newArgs ++ newLocals)
-    runReaderT (runStateT (genStmt stmt) 0) (Env t vars funcs)
+    runReaderT (runStateT (genStmt stmt) 0) (Env t vars funcs className)
     return ()
     where
         rewriteDecl ((Decl t id), n) = (id, Var n t)
 
-generateProgram :: Program -> BasicMonad ()
-generateProgram (Prog funcs) = do
-    addLn ".class MainClass"
+generateProgram :: Program -> String -> BasicMonad ()
+generateProgram (Prog funcs) className= do
+    addLn $ ".class " ++ className
     addLn ".super java/lang/Object"
-    tell builtinMethods
+    tell $ map (replace classNameMacro className) builtinMethods
     forM_ (M.toList funcs) generateMethod
-    tell mainMethod    
+    tell $ map (replace classNameMacro className) mainMethod
     where
         generateMethod :: (UniqId, Function) -> BasicMonad ()
         generateMethod (mId, func@(Func t args _ _)) = do
@@ -232,15 +238,29 @@ generateProgram (Prog funcs) = do
             addLn $ ".limit locals 10"
             -- TODO
             addLn $ ".limit stack 20"
-            generateFunction fEnv func
+            generateFunction fEnv func className
             addLn $ ".end method"
         fEnv = funcs `M.union` (M.fromList builtins)
 
+invokeJasmin :: [String] -> String -> IO (Either CmpError ())
+invokeJasmin lines className = do
+    tmpDir <- getTemporaryDirectory
+    (tempPath, tempH) <- openTempFile tmpDir $ className ++ ".j"
+    forM_ lines (hPutStrLn tempH)
+    hClose tempH
+    exitCode <- rawSystem "java" ["-jar", JASMIN_DIR ++ "/jasmin.jar", tempPath]
+    let res = case exitCode of
+            ExitFailure i -> Left $ CErr $ "jasmin exited with code: " ++ (show i)
+            _ -> Right ()
+    hPutStrLn stdout tempPath
+    -- removeFile tempPath
+    return res
+    
+
+
 compileJasmin :: Program -> String -> IO (Either CmpError ())
-compileJasmin prog execPath = do
-    let res = execWriterT (generateProgram prog)
+compileJasmin prog className = do
+    let res = execWriterT (generateProgram prog className)
     case res of
         Left err -> return $ Left err
-        Right lines -> do
-            forM_ lines putStrLn
-            return $ Right ()
+        Right lines -> invokeJasmin lines className
