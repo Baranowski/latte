@@ -179,9 +179,8 @@ genExpr (App id es) = do
     let (Func fT args _ _) = func
     addI $ "invokestatic " ++ (funcDesc id args fT)
     where
-        funcDesc id args t = "MainClass/" ++ id ++ "(" ++
-            (concat (map (\(Decl t _) -> typeDesc t) args)) ++ 
-            ")" ++ (typeDesc t)
+        funcDesc id args t = "MainClass/" ++ id ++
+            (funcTypeDesc args t)
 genExpr (ConstBool False) = addI "iconst_0"
 genExpr (ConstBool True) = addI "iconst_1"
 genExpr (ConstInt n) = addI $ "ldc " ++ (show n)
@@ -196,6 +195,9 @@ genExpr (EId id) = do
     var <- myLookup id vs
     addI $ (pI (vT var)) ++ "laod_" ++ (show $ reg var)
 
+funcTypeDesc args t = "(" ++ 
+    (concat (map (\(Decl t _) -> typeDesc t) args)) ++ 
+    ")" ++ (typeDesc t)
 typeDesc LtString = "Ljava/lang/String;"
 typeDesc LtVoid = "V"
 typeDesc LtInt = "I"
@@ -224,8 +226,8 @@ generateProgram (Prog funcs) = do
     tell mainMethod    
     where
         generateMethod :: (UniqId, Function) -> BasicMonad ()
-        generateMethod (mId, func) = do
-            addLn $ ".method static public " ++ mId
+        generateMethod (mId, func@(Func t args _ _)) = do
+            addLn $ ".method static public " ++ mId ++ (funcTypeDesc args t)
             generateFunction fEnv func
             addLn $ ".end method"
         fEnv = funcs `M.union` (M.fromList builtins)
