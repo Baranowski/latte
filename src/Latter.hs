@@ -27,14 +27,14 @@ compileFile path execPath = do
                     hPutStrLn stderr $ show err
                     exitFailure
                 Right full -> do
-                    putStrLn (show full)
+                    --putStrLn (show full)
                     compileRes <- compileJasmin full execPath
                     case compileRes of
                         Left err -> do
                             hPutStrLn stderr "ERROR"
                             hPutStrLn stderr $ show err
                         Right _ -> do
-                            hPutStrLn stdout "OK"
+                            hPutStrLn stderr "OK"
 
 
 main = do
