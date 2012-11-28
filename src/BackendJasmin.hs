@@ -221,6 +221,7 @@ generateProgram (Prog funcs) = do
     addLn ".super java/lang/Object"
     tell builtinMethods
     forM_ (M.toList funcs) generateMethod
+    tell mainMethod    
     where
         generateMethod :: (UniqId, Function) -> BasicMonad ()
         generateMethod (mId, func) = do

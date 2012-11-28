@@ -264,7 +264,9 @@ getFEnv fL = do
         addFun lfun@(Loc p f@(LtFun name _ _ _)) = do
             env <- get
             when (name `M.member` env) (semErr p $ "Another declaration of function " ++ name)
-            id <- nextId name
+            id <- if (name == "main")
+                then return "main__"
+                else nextId name
             put $ M.insert name (id, lfun) env
 
 rwtProgram (LtTop lfL) = do

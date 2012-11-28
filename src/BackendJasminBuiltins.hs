@@ -115,3 +115,8 @@ builtinMethods = [
     "    irem",
     "    ireturn",
     ".end method"]
+mainMethod = [
+    ".method public static main([Ljava/lang/String;)I",
+    "    invokestatic MainClass/main__()I",
+    "    ireturn",
+    ".end method"]
