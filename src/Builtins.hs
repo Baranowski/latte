@@ -5,11 +5,11 @@ import Abs2ndStage
 
 builtins :: [(String, Function)]
 builtins = [
-    ("printInt", Func LtInt
+    ("printInt", Func LtVoid
         [Decl LtInt "arg1_1"]
         []
         (Blck [])),
-    ("printString", Func LtString
+    ("printString", Func LtVoid
         [Decl LtString "arg2_1"]
         []
         (Blck [])),
