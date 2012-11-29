@@ -215,10 +215,9 @@ generateFunction funcs (Func t args decls stmt) className = do
     let argsN = (length args)
     let newArgs = rewriteDecl `map` (args `zip` [0..])
     let newLocals = rewriteDecl `map` (decls `zip` [argsN..])
-    forM (reverse newArgs) (\(_, (Var n t)) ->
-        addI $ (pI t) ++ "store_" ++ (show n))
     let vars = M.fromList (newArgs ++ newLocals)
     runReaderT (runStateT (genStmt stmt) 0) (Env t vars funcs className)
+    runReaderT (runStateT (genStmt Ret) 0) (Env t vars funcs className)
     return ()
     where
         rewriteDecl ((Decl t id), n) = (id, Var n t)
