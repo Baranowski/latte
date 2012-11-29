@@ -118,8 +118,10 @@ rwtStmtDecls (Loc p (LtDBlock t decls)) = do
         rwtDecl (Loc dP (LtDEmpty name)) =
             rwtDecl (Loc dP (LtDExpr name (Loc (Pos 0 0) (defaultValue t))))
 rwtStmtDecls lblock@(Loc p (LtBlock stmtL)) = do
+    oldEnv <- get
     newEnv
     newStmtL <- forM stmtL rwtStmtDecls
+    put oldEnv
     return $ Blck newStmtL
 rwtStmtDecls (Loc p (LtReturn (Loc _ LtEVoid))) = do
     t <- ask
