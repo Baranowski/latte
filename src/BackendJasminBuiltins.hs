@@ -126,8 +126,6 @@ builtinMethods = [
     "    aload_2",
     "    aload_1",
     "    invokevirtual java/lang/String/concat(Ljava/lang/String;)Ljava/lang/String;",
-    "    pop",
-    "    aload_2",
     "    areturn",
     ".end method",
     "",
