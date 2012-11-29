@@ -9,7 +9,7 @@ import Data.List.Utils
 import System.IO.Temp(openTempFile)
 import System.Directory(getTemporaryDirectory, removeFile)
 import System.IO(hPutStrLn, stdout, hClose)
-import System.Cmd(rawSystem)
+import System.Cmd(system)
 import System.Exit(ExitCode(..))
 
 import AbsCommon
@@ -271,12 +271,11 @@ invokeJasmin lines className = do
     (tempPath, tempH) <- openTempFile tmpDir $ className ++ ".j"
     forM_ lines (hPutStrLn tempH)
     hClose tempH
-    exitCode <- rawSystem "java" ["-jar", JASMIN_DIR ++ "/jasmin.jar", tempPath]
+    exitCode <- system $ "java -jar " ++ JASMIN_DIR ++ "/jasmin.jar " ++ tempPath ++ " > /dev/null 2> /dev/null"
     let res = case exitCode of
             ExitFailure i -> Left $ CErr $ "jasmin exited with code: " ++ (show i)
             _ -> Right ()
-    hPutStrLn stdout tempPath
-    -- removeFile tempPath
+    removeFile tempPath
     return res
 
 compileJasmin :: Program -> String -> IO (Either CmpError ())
