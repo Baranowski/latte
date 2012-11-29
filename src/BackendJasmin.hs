@@ -231,10 +231,9 @@ generateProgram (Prog funcs) className= do
     tell $ map (replace classNameMacro className) mainMethod
     where
         generateMethod :: (UniqId, Function) -> BasicMonad ()
-        generateMethod (mId, func@(Func t args _ _)) = do
+        generateMethod (mId, func@(Func t args decls _)) = do
             addLn $ ".method static public " ++ mId ++ (funcTypeDesc args t)
-            -- TODO
-            addLn $ ".limit locals 10"
+            addLn $ ".limit locals " ++ ( show $ (length args) + (length decls))
             -- TODO
             addLn $ ".limit stack 20"
             generateFunction fEnv func className
