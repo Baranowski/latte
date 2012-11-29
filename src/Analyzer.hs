@@ -247,11 +247,8 @@ rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
     (newBlock, localDecls) <- runWriterT $ runReaderT (rwtStmtDecls lblock) retT
     let returns = checkReturn newBlock
     when (not returns && retT /= LtVoid) (semErr p ("Function " ++ name ++ " lacks 'return' statement"))
-    let block = if (retT == LtVoid)
-        -- Add return statement to void functions
-        then let (Blck stmts) = newBlock in (Blck (stmts ++ [Ret]))
-        else newBlock
-    return $ Func retT argDecls localDecls block
+    -- TODO: splaszczanie zagniezdzenia blokow
+    return $ Func retT argDecls localDecls newBlock
     where
         checkReturn Ret = True
         checkReturn (RetExpr _) = True
