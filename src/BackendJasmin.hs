@@ -231,14 +231,39 @@ generateProgram (Prog funcs) className= do
     tell $ map (replace classNameMacro className) mainMethod
     where
         generateMethod :: (UniqId, Function) -> BasicMonad ()
-        generateMethod (mId, func@(Func t args decls _)) = do
+        generateMethod (mId, func@(Func t args decls stmt)) = do
             addLn $ ".method static public " ++ mId ++ (funcTypeDesc args t)
             addLn $ ".limit locals " ++ ( show $ (length args) + (length decls))
             -- TODO
-            addLn $ ".limit stack 20"
+            addLn $ ".limit stack " ++ (show $ limitStackStmt stmt)
             generateFunction fEnv func className
             addLn $ ".end method"
         fEnv = funcs `M.union` (M.fromList builtins)
+
+limitStackStmt (Blck stmts) = foldl max 1 (map limitStackStmt stmts)
+limitStackStmt (RetExpr e) = limitStackExpr e
+limitStackStmt (Ret) = 1
+limitStackStmt (Ass _ e) = limitStackExpr e
+limitStackStmt (If e s) = max (limitStackStmt s) $ 1 + (limitStackExpr e)
+limitStackStmt (IfElse e s1 s2) = max (1 + (limitStackStmt s1)) $ max (1 + (limitStackStmt s2)) (limitStackExpr e)
+limitStackStmt (While e s) = max (limitStackStmt s) (limitStackExpr e)
+limitStackStmt (SExpr e) = limitStackExpr e
+limitStackStmt _ = 0
+
+limitStackExpr (Or es) = foldl max 1 (map limitStackExpr es)
+limitStackExpr (And es) = foldl max 1 (map limitStackExpr es)
+limitStackExpr (IntComp _ e1 e2) = max (limitStackExpr e1) (1 + (limitStackExpr e2))
+limitStackExpr (BoolComp _ e1 e2) = max (limitStackExpr e1) (1 + limitStackExpr e2)
+limitStackExpr (StrComp _ e1 e2) = limitStackExpr (App "" [e1,e2])
+limitStackExpr (Arithm '%' e1 e2) = limitStackExpr (App "" [e1,e2])
+limitStackExpr (Arithm _ e1 e2) = max (limitStackExpr e1) (1 + (limitStackExpr e2))
+limitStackExpr (Neg e) = limitStackExpr (Arithm '-' (ConstInt 0) e)
+limitStackExpr (Not e) = limitStackExpr (Arithm '-' (ConstInt 1) e)
+limitStackExpr (Concat e1 e2) = max (limitStackExpr e1) (1+(limitStackExpr e2))
+limitStackExpr (App _ es) =
+    let numbered = es `zip` [0..] in
+        foldl max 1 (map (\(e,n) -> n + (limitStackExpr e)) numbered)
+limitStackExpr _ = 1
 
 invokeJasmin :: [String] -> String -> IO (Either CmpError ())
 invokeJasmin lines className = do
@@ -253,8 +278,6 @@ invokeJasmin lines className = do
     hPutStrLn stdout tempPath
     -- removeFile tempPath
     return res
-    
-
 
 compileJasmin :: Program -> String -> IO (Either CmpError ())
 compileJasmin prog className = do
