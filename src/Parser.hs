@@ -95,10 +95,13 @@ classParser :: LtParser st LatteClass
 classParser = do
     mylex $ keyword "class"
     name <- mylex idParser
+    super <- optionMaybe $ try $ do
+        mylex $ keyword "extends"
+        mylex idParser
     mylex $ char '{'
     (decls, methods) <- manyInterleaved1 (mylex $ loc cDeclParser) (mylex $ loc funParser)
     mylex $ char '}'
-    return $ LtClass name decls methods
+    return $ LtClass name super decls methods
 
 cDeclParser :: LtParser st LatteCDecl
 cDeclParser = do

@@ -9,7 +9,7 @@ data Located a = Loc Pos a
 
 data LatteTree = LtTop [Located LatteFun] [Located LatteClass]
     deriving (Eq, Show)
-data LatteClass = LtClass LatteId [Located LatteCDecl] [Located LatteFun]
+data LatteClass = LtClass LatteId (Maybe LatteId) [Located LatteCDecl] [Located LatteFun]
     deriving (Eq, Show)
 data LatteFun = LtFun LatteId LatteType [Located LatteArg] (Located LatteStmt)
     deriving (Eq, Show)
