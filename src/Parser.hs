@@ -116,6 +116,9 @@ typeParser = do
 	  <|> try (keyword "string" >> return LtString)
 	  <|> try (keyword "boolean" >> return LtBool)
 	  <|> try (keyword "void" >> return LtVoid)
+          <|> try (do
+                t <- idParser
+                return $ LtType t)
     return result
 
 -- Statements
