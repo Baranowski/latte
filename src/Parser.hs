@@ -83,7 +83,7 @@ idParser = try $ do
         else return word
 
 lValParser :: LtParser st LatteLval
-lValParser = (mylex idParser) `sepBy` (mylex $ char '.')
+lValParser = (mylex idParser) `sepBy1` (mylex $ char '.')
 
 funParser :: LtParser st LatteFun
 funParser = do

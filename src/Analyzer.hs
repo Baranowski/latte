@@ -249,7 +249,7 @@ rwtExpr' (Loc p (LtENeg lexpr)) = do
 rwtExpr' (Loc _ (LtEStr str)) = do
     return (ConstStr str, LtString)
 rwtExpr' (Loc p (LtEApp [name] exprL)) = do
-    funMbe <- asks ((M.lookup name) . funs. fEnv)
+    funMbe <- asks ((M.lookup name) . funs . fEnv)
     (funId, ltFun) <- case funMbe of {
         Nothing -> semErr p ("No such function: " ++ name) ;
         Just res -> return res}
