@@ -10,7 +10,9 @@ type LValue = [String]
 data Program = Prog (M.Map UniqId Function) (M.Map String Class)
     deriving (Show, Eq)
 
-data Class = Class (Class) (M.Map String Type) (M.Map String Function)
+data Class = Class {super :: (Maybe Class),
+                    fields :: (M.Map String Type),
+                    methods :: (M.Map String Function)}
     deriving (Show, Eq)
 
 -- typ, argumenty, zmienne lokalne, blok
