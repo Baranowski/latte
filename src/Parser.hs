@@ -14,7 +14,7 @@ type LtParser st res = GenParser Char st res
 wordFirstChar =  ['a'..'z'] ++ ['A'..'Z'] ++ "_"
 wordChars = ['a'..'z'] ++ ['A'..'Z'] ++ "_" ++ ['0'..'9']
 reservedKeywords = [ "return", "if", "else", "while", "int", "string", "void",
-    "boolean", "true", "false" ]
+    "boolean", "true", "false", "extends" ]
 
 wordParser :: LtParser st String
 wordParser = do
@@ -81,6 +81,9 @@ idParser = try $ do
     if word `elem` reservedKeywords
         then unexpected $ "reserved keyword: \"" ++ word ++ "\""
         else return word
+
+lValParser :: LtParser st LatteLval
+lValParser = (mylex idParser) `sepBy` (mylex $ char '.')
 
 funParser :: LtParser st LatteFun
 funParser = do
@@ -150,23 +153,23 @@ declParser = do
     return $ LtDBlock t declL
 
 assParser = do
-    name <- mylex idParser
+    lVal <- mylex lValParser
     mylex $ char '='
     expr <- mylex exprParser
     mylex $ char ';'
-    return $ LtAss name expr
+    return $ LtAss lVal expr
 
 incrParser = do
-    name <- mylex idParser
+    lVal <- mylex lValParser
     mylex $ string "++"
     mylex $ char ';'
-    return $ LtIncr name
+    return $ LtIncr lVal
 
 decrParser = do
-    name <- mylex idParser
+    lVal <- mylex lValParser
     mylex $ string "--"
     mylex $ char ';'
-    return $ LtDecr name
+    return $ LtDecr lVal
 
 retParser = do
     mylex $ keyword "return"
@@ -312,15 +315,15 @@ exprBasicParser = do
                let i = (read str) :: Int
                return $ LtEInt i
         <|> do
-               name <- mylex idParser
+               lVal <- mylex lValParser
                args <- optionMaybe $ do
                    mylex $ char '('
                    eL <- exprParser `sepBy` (mylex $ char ',')
                    mylex $ char ')'
                    return eL
                case args of
-                   Nothing -> return $ LtEId name
-                   Just eL -> return $ LtEApp name eL)
+                   Nothing -> return $ LtEId lVal
+                   Just eL -> return $ LtEApp lVal eL)
 
 parseLatte :: String -> String -> Either ParseError LatteTree
 parseLatte = parse topParser

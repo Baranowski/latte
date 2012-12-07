@@ -5,8 +5,12 @@ import qualified Data.Map as M
 import AbsCommon
 
 type UniqId = String
+type LValue = [String]
 
-data Program = Prog (M.Map UniqId Function)
+data Program = Prog (M.Map UniqId Function) (M.Map String Class)
+    deriving (Show, Eq)
+
+data Class = Class (Class) (M.Map String Type) (M.Map String Function)
     deriving (Show, Eq)
 
 -- typ, argumenty, zmienne lokalne, blok
@@ -20,9 +24,9 @@ data Statement =
       Blck [Statement]
     | Ret
     | RetExpr Expression
-    | Ass UniqId Expression
-    | Incr UniqId
-    | Decr UniqId
+    | Ass LValue Expression
+    | Incr LValue
+    | Decr LValue
     | If Expression Statement
     | IfElse Expression Statement Statement
     | While Expression Statement
@@ -41,11 +45,11 @@ data Expression =
     | Not Expression
     | Neg Expression
     | Concat Expression Expression
-    | App UniqId [Expression]
+    | App LValue [Expression]
     | ConstBool Bool
     | ConstInt Int
     | ConstStr String
-    | EId UniqId
+    | EId LValue
     deriving (Show, Eq)
 
 type Type = LatteType
