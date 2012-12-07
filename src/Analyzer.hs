@@ -93,18 +93,18 @@ rwtStmtDecls (Loc p (LtIf lexpr lstmt1 lstmt2)) = do
         _ -> do
              newS2 <- rwtStmtDecls lstmt2
              return $ IfElse newE newS newS2
-rwtStmtDecls (Loc p (LtIncr name)) = do
-    assertVarType name LtInt p
-    (varId, _) <- lookupVar name p
+rwtStmtDecls (Loc p (LtIncr lval)) = do
+    assertVarType lval LtInt p
+    (varId, _) <- lookupVar lval p
     return $ Incr varId
-rwtStmtDecls (Loc p (LtDecr name)) = do
-    assertVarType name LtInt p
-    (varId, _) <- lookupVar name p
+rwtStmtDecls (Loc p (LtDecr lval)) = do
+    assertVarType lval LtInt p
+    (varId, _) <- lookupVar lval p
     return $ Decr varId
-rwtStmtDecls (Loc p (LtAss name lexpr)) = do
+rwtStmtDecls (Loc p (LtAss lval lexpr)) = do
     (newE, exprT) <- lift $ lift $ rwtExpr lexpr
-    assertVarType name exprT p
-    (varId, _) <- lookupVar name p
+    assertVarType lval exprT p
+    (varId, _) <- lookupVar lval p
     return $ Ass varId newE
 rwtStmtDecls (Loc p (LtDBlock t decls)) = do
     newDs <- forM decls rwtDecl
@@ -114,7 +114,7 @@ rwtStmtDecls (Loc p (LtDBlock t decls)) = do
             newE <- lift $ lift $ rwtExprTyped t lexpr
             newId <- addVariable name t dP
             tell [Decl t newId]
-            return $ Ass newId newE
+            return $ Ass [newId] newE
         rwtDecl (Loc dP (LtDEmpty name)) =
             rwtDecl (Loc dP (LtDExpr name (Loc (Pos 0 0) (defaultValue t))))
 rwtStmtDecls lblock@(Loc p (LtBlock stmtL)) = do
