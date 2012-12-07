@@ -22,6 +22,7 @@ compileFile path execPath = do
                 exitFailure
             Right lt -> case rewriteProgram lt of
                 Left err -> do
+                    putStrLn (show lt)
                     hPutStrLn stderr "ERROR"
                     hPutStrLn stderr $ show err
                     exitFailure
