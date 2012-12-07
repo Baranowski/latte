@@ -7,7 +7,6 @@ import System.IO (hPutStrLn, stderr, stdout)
 
 import Parser
 import Analyzer
-import BackendJasmin
 
 compileFile :: String -> String -> IO ()
 compileFile path execPath = do
@@ -27,15 +26,7 @@ compileFile path execPath = do
                     hPutStrLn stderr $ show err
                     exitFailure
                 Right full -> do
-                    --putStrLn (show full)
-                    compileRes <- compileJasmin full execPath
-                    case compileRes of
-                        Left err -> do
-                            hPutStrLn stderr "ERROR"
-                            hPutStrLn stderr $ show err
-                        Right _ -> do
-                            hPutStrLn stderr "OK"
-
+                    putStrLn (show full)
 
 main = do
     args <- getArgs
