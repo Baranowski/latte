@@ -73,6 +73,34 @@ instance (ErrorableMonad m) => MonadWithVars (StateT VarEnv (ReaderT FunEnv m)) 
         (_, varT) <- lookupVar lval p
         when (t /= varT) (semErr p ("Variable " ++ (prettyShow lval) ++ " is of type " ++
             (show varT) ++ ", expected: " ++ (show t)))
+instance (ErrorableMonad m) => MonadWithVars (ReaderT FunVarEnv m) where
+    lookupVar lval p = do
+        (first,others) <- case lval of
+            [] -> semErr p ("Empty l-value")
+            x:xs -> return (x,xs)
+        mbeVar <- asks $ (M.lookup first) . ids .vEnv
+        (newFirst, firstT) <- case mbeVar of
+            Nothing -> semErr p ("Reference to unknown variable: " ++ first)
+            Just var -> return var
+        (newLval, lastT) <- foldM (addSelector p) ([newFirst], firstT) others
+        return (reverse newLval, lastT)
+        where
+          addSelector p (acc, lastT) selector = do
+            clName <- case lastT of
+                LtType s -> return s
+                t -> semErr p ("Expected a class instance, got type: " ++ (show t))
+            mbeCl <- asks $ (M.lookup clName) . classes . fEnv
+            cl <- case mbeCl of
+                Nothing -> semErr p ("Unknown class: " ++ clName)
+                Just x -> return x
+            nextT <- case (M.lookup selector (fields cl)) of
+                Nothing -> semErr p ("Unknown field: " ++ selector)
+                Just x -> return x
+            return (selector:acc, nextT)
+    assertVarType lval t p = do
+        (_, varT) <- lookupVar lval p
+        when (t /= varT) (semErr p ("Variable " ++ (prettyShow lval) ++ " is of type " ++
+            (show varT) ++ ", expected: " ++ (show t)))
 instance (MonadTrans t, MonadWithVars m, Monad (t m)) => MonadWithVars (t m) where
     lookupVar lval p = lift $ lookupVar lval p
     assertVarType lval t p = lift $ assertVarType lval t p
@@ -258,6 +286,23 @@ rwtExpr' (Loc p (LtEApp [name] exprL)) = do
     let zipL = exprL `zip` argL
     newEL <- forM zipL (\(lexpr, Loc _ (LtArg _ argT)) -> rwtExprTyped' argT lexpr)
     return (App [funId] newEL, funT)
+rwtExpr' (Loc p (LtEApp lval exprL)) = do
+    let (mName:rest) = reverse lval
+    let fields = reverse rest
+    (newLval, lastT) <- lookupVar fields p
+    let LtType clName = lastT
+    clMbe <- asks $ (M.lookup clName) . classes . fEnv
+    cl <- case clMbe of
+        Nothing -> semErr p ("Unable to find unknown class: " ++ clName)
+        Just x -> return x
+    method <- case (M.lookup mName (methods cl)) of
+        Nothing -> semErr p ("No such method: " ++ mName)
+        Just x -> return x
+    let (Func fT args _ _) = method
+    when ((length args) /= (length exprL)) (semErr p ("Too many or too few arguments passed to method" ++ mName))
+    let zipL = exprL `zip` args
+    newEL <- forM zipL (\(lexpr, Decl argT _) -> rwtExprTyped' argT lexpr)
+    return (App newLval newEL, fT)
 rwtExpr' (Loc p LtEFalse) = return (ConstBool False, LtBool)
 rwtExpr' (Loc p LtETrue) = return (ConstBool True, LtBool)
 rwtExpr' (Loc p (LtEInt i)) = return (ConstInt i, LtInt)
@@ -267,6 +312,9 @@ rwtExpr' (Loc p (LtEId [name])) = do
         Nothing -> semErr p ("No such variable: " ++ name) ;
         Just res -> return res }
     return (EId [varId], varT)
+rwtExpr' (Loc p (LtEId lval)) = do
+    (newLval, t) <- lookupVar lval p
+    return (EId newLval, t)
 
 rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
     argDecls <- forM argL $ \ (Loc p (LtArg name argT)) -> do
