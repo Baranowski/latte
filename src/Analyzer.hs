@@ -71,8 +71,7 @@ instance (ErrorableMonad m) => MonadWithVars (StateT VarEnv (ReaderT FunEnv m)) 
 
     assertVarType lval t p = do
         (_, varT) <- lookupVar lval p
-        when (t /= varT) (semErr p ("Variable " ++ (prettyShow lval) ++ " is of type " ++
-            (show varT) ++ ", expected: " ++ (show t)))
+        assertTypesMatch t varT p
 instance (ErrorableMonad m) => MonadWithVars (ReaderT FunVarEnv m) where
     lookupVar lval p = do
         (first,others) <- case lval of
@@ -99,8 +98,7 @@ instance (ErrorableMonad m) => MonadWithVars (ReaderT FunVarEnv m) where
             return (selector:acc, nextT)
     assertVarType lval t p = do
         (_, varT) <- lookupVar lval p
-        when (t /= varT) (semErr p ("Variable " ++ (prettyShow lval) ++ " is of type " ++
-            (show varT) ++ ", expected: " ++ (show t)))
+        assertTypesMatch' t varT p
 instance (MonadTrans t, MonadWithVars m, Monad (t m)) => MonadWithVars (t m) where
     lookupVar lval p = lift $ lookupVar lval p
     assertVarType lval t p = lift $ assertVarType lval t p
@@ -195,10 +193,34 @@ defaultValue LtBool = LtEFalse
 defaultValue LtVoid = LtEVoid
 defaultValue (LtType s) = LtENull s
 
+assertTypesMatch :: (ErrorableMonad m) => Type -> Type -> Pos -> StateT VarEnv (ReaderT FunEnv m) ()
+assertTypesMatch (LtType expTs) (LtType actTs) p = helper expTs actTs p expTs
+    where
+        helper expS actS p oldS = when (expS /= actS) $ do
+            clMbe <- asks ((M.lookup expS) . classes)
+            let (Just (Class super _ _)) = clMbe
+            case super of
+                Nothing -> semErr p ("Expected type: " ++ oldS ++ ", got: " ++ actS)
+                Just s -> helper s actS p oldS
+assertTypesMatch t1 t2 p =
+    when (t1 /= t2) (semErr p ("Expected type: " ++ (show t1) ++ ", got: " ++ (show t2)))
+
+assertTypesMatch' :: (ErrorableMonad m) => Type -> Type -> Pos -> ReaderT FunVarEnv m ()
+assertTypesMatch' (LtType expTs) (LtType actTs) p = helper expTs actTs p expTs
+    where
+        helper expS actS p oldS = when (expS /= actS) $ do
+            clMbe <- asks ((M.lookup expS) . classes . fEnv)
+            let (Just (Class super _ _)) = clMbe
+            case super of
+                Nothing -> semErr p ("Expected type: " ++ oldS ++ ", got: " ++ actS)
+                Just s -> helper s actS p oldS
+assertTypesMatch' t1 t2 p =
+    when (t1 /= t2) (semErr p ("Expected type: " ++ (show t1) ++ ", got: " ++ (show t2)))
+
 rwtExprTyped :: Type -> (Located LatteExpr) -> StateT VarEnv (ReaderT FunEnv MyM) Expression
 rwtExprTyped t lexpr@(Loc p expr) = do
     (newE, exprT) <- rwtExpr lexpr
-    when (t /= exprT) (semErr p ("Expression is of type: " ++ (show exprT) ++ ", expected: " ++ (show t)))
+    assertTypesMatch t exprT p
     return newE
 rwtExpr :: (Located LatteExpr) -> StateT VarEnv (ReaderT FunEnv MyM) (Expression, Type)
 rwtExpr lexpr = do
@@ -209,7 +231,7 @@ rwtExpr lexpr = do
 rwtExprTyped' :: Type -> (Located LatteExpr) -> ReaderT FunVarEnv MyM Expression
 rwtExprTyped' t lexpr@(Loc p _) = do
     (newE, eT) <- rwtExpr' lexpr
-    when (t /= eT) (semErr p ("Expression is of type: " ++ (show eT) ++ ", expected: " ++ (show t)))
+    assertTypesMatch' t eT p
     return newE
 
 rwtExpr' :: (Located LatteExpr) -> ReaderT FunVarEnv MyM (Expression, Type)
@@ -364,7 +386,7 @@ getClEnv clL = do
         when (name `M.member` env) (semErr p $ "Another declaration of class " ++ name)
         newDecls <- execStateT (forM_ decls getCDecl) M.empty
         methods <- execStateT (forM_ funs getMethod) M.empty
-        put $ M.insert name (Class Nothing newDecls methods) env
+        put $ M.insert name (Class super newDecls methods) env
       getCDecl ldecl@(Loc p (LtCDecl name t)) = do
         env <- get
         when (name `M.member` env) (semErr p $ "Another declaration of field " ++ name)
