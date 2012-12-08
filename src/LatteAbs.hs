@@ -28,6 +28,7 @@ data LatteStmt = LtSExpr (Located LatteExpr)
                | LtReturn (Located LatteExpr)
                | LtPass
     deriving (Eq, Show)
+
 data LatteExpr = LtEOr [(Located LatteExpr)]
                | LtEAnd [(Located LatteExpr)]
                | LtERel LatteRel (Located LatteExpr) (Located LatteExpr)
@@ -41,6 +42,8 @@ data LatteExpr = LtEOr [(Located LatteExpr)]
                | LtETrue
                | LtEInt Int
                | LtEId LatteLval
+               | LtENew String
+               | LtENull String
                | LtEVoid
     deriving (Eq, Show)
 data LatteAddOp = Ladd

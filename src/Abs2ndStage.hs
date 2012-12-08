@@ -52,6 +52,8 @@ data Expression =
     | ConstInt Int
     | ConstStr String
     | EId LValue
+    | New String
+    | Null
     deriving (Show, Eq)
 
 type Type = LatteType

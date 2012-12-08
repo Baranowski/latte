@@ -296,20 +296,26 @@ exprUnaryParser = do
            return $ LtENeg e)
     <|> exprBasicParser
 
-exprBasicParser = do
-        do mylex $ char '('
-           e <- mylex exprParser
-           mylex $ char ')'
-           return e
-    <|> (loc $ do
-            do
+exprBasicParser =
+        (loc $
+            (do
                char '"'
                str <- many (noneOf "\\\""
                         <|> (char '\\' >> anyChar))
                char '"'
-               return $ LtEStr str
+               return $ LtEStr str)
         <|> try (keyword "true" >> return LtETrue)
         <|> try (keyword "false" >> return LtEFalse)
+        <|> try (do
+                mylex $ char '('
+                t <- mylex idParser
+                mylex $ char ')'
+                keyword "null"
+                return $ LtENull t)
+        <|> try (do
+                mylex $ keyword "new"
+                t <- idParser
+                return $ LtENew t)
         <|> do
                str <- many1 (oneOf ['0'..'9'])
                let i = (read str) :: Int
@@ -324,6 +330,10 @@ exprBasicParser = do
                case args of
                    Nothing -> return $ LtEId lVal
                    Just eL -> return $ LtEApp lVal eL)
+    <|> (do mylex $ char '('
+            e <- mylex exprParser
+            mylex $ char ')'
+            return e)
 
 parseLatte :: String -> String -> Either ParseError LatteTree
 parseLatte = parse topParser

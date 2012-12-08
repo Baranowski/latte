@@ -192,7 +192,8 @@ defaultValue :: Type -> LatteExpr
 defaultValue LtInt = LtEInt 0
 defaultValue LtString = LtEStr ""
 defaultValue LtBool = LtEFalse
-defined LtVoid = LtEVoid
+defaultValue LtVoid = LtEVoid
+defaultValue (LtType s) = LtENull s
 
 rwtExprTyped :: Type -> (Located LatteExpr) -> StateT VarEnv (ReaderT FunEnv MyM) Expression
 rwtExprTyped t lexpr@(Loc p expr) = do
@@ -315,6 +316,18 @@ rwtExpr' (Loc p (LtEId [name])) = do
 rwtExpr' (Loc p (LtEId lval)) = do
     (newLval, t) <- lookupVar lval p
     return (EId newLval, t)
+rwtExpr' (Loc p (LtENew t)) = do
+    clMbe <- asks ((M.lookup t) . classes . fEnv)
+    case clMbe of
+        Nothing -> semErr p ("Unknown class: " ++ t)
+        Just x -> return x
+    return (New t, LtType t)
+rwtExpr' (Loc p (LtENull t)) = do
+    clMbe <- asks ((M.lookup t) . classes . fEnv)
+    case clMbe of
+        Nothing -> semErr p ("Unknown class: " ++ t)
+        Just x -> return x
+    return (Null, LtType t)
 
 rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
     argDecls <- forM argL $ \ (Loc p (LtArg name argT)) -> do
