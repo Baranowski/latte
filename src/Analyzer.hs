@@ -163,9 +163,8 @@ rwtStmtDecls (Loc p (LtDecr lval)) = do
     (varId, _) <- lookupVar lval p
     return $ Decr varId
 rwtStmtDecls (Loc p (LtAss lval lexpr)) = do
-    (newE, exprT) <- lift $ lift $ rwtExpr lexpr
-    assertVarType lval exprT p
-    (varId, _) <- lookupVar lval p
+    (varId, varT) <- lookupVar lval p
+    newE <- lift $ lift $ rwtExprTyped varT lexpr
     return $ Ass varId newE
 rwtStmtDecls (Loc p (LtDBlock t decls)) = do
     newDs <- forM decls rwtDecl
