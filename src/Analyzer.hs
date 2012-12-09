@@ -333,14 +333,25 @@ rwtExpr' (Loc p (LtEApp lval exprL)) = do
     cl <- case clMbe of
         Nothing -> semErr p ("Unable to find unknown class: " ++ clName)
         Just x -> return x
-    method <- case (M.lookup mName (methods cl)) of
-        Nothing -> semErr p ("No such method: " ++ mName)
-        Just x -> return x
+    method <- lookupMethod mName cl
     let (Func fT args _ _) = method
     when ((length args) /= (length exprL)) (semErr p ("Too many or too few arguments passed to method" ++ mName))
     let zipL = exprL `zip` args
     newEL <- forM zipL (\(lexpr, Decl argT _) -> rwtExprTyped' argT lexpr)
     return (App newLval newEL, fT)
+    where
+      lookupMethod mN cl = do
+        let mMbe = M.lookup mN (methods cl)
+        case mMbe of
+            Nothing -> do
+                let (Class super _ _) = cl
+                case super of
+                    Nothing -> semErr p ("No such method: " ++ mN)
+                    Just s -> do
+                        clMbe <- asks $ (M.lookup s) . classes . fEnv
+                        let (Just newCl) = clMbe
+                        lookupMethod mN newCl
+            Just x -> return x
 rwtExpr' (Loc p LtEFalse) = return (ConstBool False, LtBool)
 rwtExpr' (Loc p LtETrue) = return (ConstBool True, LtBool)
 rwtExpr' (Loc p (LtEInt i)) = return (ConstInt i, LtInt)
