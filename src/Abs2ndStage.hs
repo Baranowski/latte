@@ -43,6 +43,7 @@ data Expression =
     | IntComp IRelation Expression Expression
     | StrComp EqRelation Expression Expression
     | BoolComp EqRelation Expression Expression
+    | PntComp EqRelation Expression Expression
     | Arithm Char Expression Expression
     | Not Expression
     | Neg Expression
