@@ -206,11 +206,11 @@ assertTypesMatch :: (ErrorableMonad m) => Type -> Type -> Pos -> StateT VarEnv (
 assertTypesMatch (LtType expTs) (LtType actTs) p = helper expTs actTs p expTs
     where
         helper expS actS p oldS = when (expS /= actS) $ do
-            clMbe <- asks ((M.lookup expS) . classes)
+            clMbe <- asks ((M.lookup actS) . classes)
             let (Just (Class super _ _)) = clMbe
             case super of
-                Nothing -> semErr p ("Expected type: " ++ oldS ++ ", got: " ++ actS)
-                Just s -> helper s actS p oldS
+                Nothing -> semErr p ("Expected type: " ++ expS ++ ", got: " ++ oldS)
+                Just s -> helper expS s p oldS
 assertTypesMatch t1 t2 p =
     when (t1 /= t2) (semErr p ("Expected type: " ++ (show t1) ++ ", got: " ++ (show t2)))
 
@@ -218,11 +218,11 @@ assertTypesMatch' :: (ErrorableMonad m) => Type -> Type -> Pos -> ReaderT FunVar
 assertTypesMatch' (LtType expTs) (LtType actTs) p = helper expTs actTs p expTs
     where
         helper expS actS p oldS = when (expS /= actS) $ do
-            clMbe <- asks ((M.lookup expS) . classes . fEnv)
+            clMbe <- asks ((M.lookup actS) . classes . fEnv)
             let (Just (Class super _ _)) = clMbe
             case super of
-                Nothing -> semErr p ("Expected type: " ++ oldS ++ ", got: " ++ actS)
-                Just s -> helper s actS p oldS
+                Nothing -> semErr p ("Expected type: " ++ expS ++ ", got: " ++ oldS)
+                Just s -> helper actS s p oldS
 assertTypesMatch' t1 t2 p =
     when (t1 /= t2) (semErr p ("Expected type: " ++ (show t1) ++ ", got: " ++ (show t2)))
 
@@ -431,9 +431,10 @@ rwtProgram (LtTop lfL lcL) = do
             (evalStateT (rwtFunction ltFun) (VEnv M.empty []))
             (FunEnv fEnv clEnv Nothing)
         return (id, newFun)
-    newCls <- forM lcL (\lc@(Loc p cl@(LtClass name _ _ _)) ->
-        runReaderT (rwtClass cl) (FunEnv fEnv clEnv (Just name)))
-    return $ Prog (M.fromList newFunL) M.empty
+    newCls <- forM lcL $ \lc@(Loc p cl@(LtClass name _ _ _)) -> do
+        newCl <- runReaderT (rwtClass cl) (FunEnv fEnv clEnv (Just name))
+        return (name, newCl)
+    return $ Prog (M.fromList newFunL) (M.fromList newCls)
     where
         builtinFuncs = map fakeFunction builtins
         fakeFunction (name, Func fType args _ _) =
