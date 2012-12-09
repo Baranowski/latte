@@ -20,7 +20,8 @@ instance Show SemError where
 type MyM = StateT Int (Either SemError)
 data FunEnv = FunEnv {
     funs :: M.Map String (UniqId, Located LatteFun),
-    classes :: M.Map String Class }
+    classes :: M.Map String Class,
+    curCl :: Maybe String}
 data VarEnv = VEnv { ids :: M.Map String (UniqId, Type), names :: [String]}
 data FunVarEnv = FunVarEnv {fEnv :: FunEnv, vEnv :: VarEnv}
 
@@ -50,11 +51,14 @@ instance (ErrorableMonad m) => MonadWithVars (StateT VarEnv (ReaderT FunEnv m)) 
             [] -> semErr p ("Empty l-value")
             x:xs -> return (x,xs)
         mbeVar <- gets $ (M.lookup first) . ids
-        (newFirst, firstT) <- case mbeVar of
-            Nothing -> semErr p ("Reference to unknown variable: " ++ first)
-            Just var -> return var
-        (newLval, lastT) <- foldM (addSelector p) ([newFirst], firstT) others
-        return (reverse newLval, lastT)
+        case mbeVar of
+            Nothing -> do
+                inClass <- asks curCl
+                when (inClass == Nothing) (semErr p ("Reference to unknown variable: " ++ first))
+                lookupVar ("self":lval) p
+            Just (newFirst, firstT) -> do
+                (newLval, lastT) <- foldM (addSelector p) ([newFirst], firstT) others
+                return (reverse newLval, lastT)
         where
           addSelector p (acc, lastT) selector = do
             clName <- case lastT of
@@ -78,11 +82,14 @@ instance (ErrorableMonad m) => MonadWithVars (ReaderT FunVarEnv m) where
             [] -> semErr p ("Empty l-value")
             x:xs -> return (x,xs)
         mbeVar <- asks $ (M.lookup first) . ids .vEnv
-        (newFirst, firstT) <- case mbeVar of
-            Nothing -> semErr p ("Reference to unknown variable: " ++ first)
-            Just var -> return var
-        (newLval, lastT) <- foldM (addSelector p) ([newFirst], firstT) others
-        return (reverse newLval, lastT)
+        case mbeVar of
+            Nothing -> do
+                inClass <- asks (curCl . fEnv)
+                when (inClass == Nothing) (semErr p ("Reference to unknown variable: " ++ first))
+                lookupVar ("self":lval) p
+            Just (newFirst, firstT) -> do
+                (newLval, lastT) <- foldM (addSelector p) ([newFirst], firstT) others
+                return (reverse newLval, lastT)
         where
           addSelector p (acc, lastT) selector = do
             clName <- case lastT of
@@ -108,7 +115,9 @@ class (Monad m) => MonadWritingVars m where
     newEnv :: m ()
 instance (ClockedMonad m, ErrorableMonad m) => MonadWritingVars (StateT VarEnv m) where
     addVariable name t p = do
-        newId <- nextId name
+        newId <- if (name == "self")
+            then return name
+            else nextId name
         usedNames <- gets names
         when (name `elem` usedNames) (semErr p ("Variable " ++ name ++ " has been already declared"))
         st <- gets ids
@@ -301,14 +310,18 @@ rwtExpr' (Loc _ (LtEStr str)) = do
     return (ConstStr str, LtString)
 rwtExpr' (Loc p (LtEApp [name] exprL)) = do
     funMbe <- asks ((M.lookup name) . funs . fEnv)
-    (funId, ltFun) <- case funMbe of {
-        Nothing -> semErr p ("No such function: " ++ name) ;
-        Just res -> return res}
-    let (Loc _ (LtFun _ funT argL _)) = ltFun
-    when ((length argL) /= (length exprL)) (semErr p ("Too many or too few arguments passed to function " ++ name))
-    let zipL = exprL `zip` argL
-    newEL <- forM zipL (\(lexpr, Loc _ (LtArg _ argT)) -> rwtExprTyped' argT lexpr)
-    return (App [funId] newEL, funT)
+    case funMbe of {
+      Nothing -> do
+        inClass <- asks $ curCl . fEnv
+        when (inClass == Nothing) (semErr p ("No such function: " ++ name))
+        rwtExpr' (Loc p (LtEApp ["self",name] exprL))
+    ; Just (funIdAtom, ltFun) -> do
+        let funId = [funIdAtom]
+        let (Loc _ (LtFun _ funT argL _)) = ltFun
+        when ((length argL) /= (length exprL)) (semErr p ("Too many or too few arguments passed to function " ++ name))
+        let zipL = exprL `zip` argL
+        newEL <- forM zipL (\(lexpr, Loc _ (LtArg _ argT)) -> rwtExprTyped' argT lexpr)
+        return (App funId newEL, funT)}
 rwtExpr' (Loc p (LtEApp lval exprL)) = do
     let (mName:rest) = reverse lval
     let fields = reverse rest
@@ -352,6 +365,10 @@ rwtExpr' (Loc p (LtENull t)) = do
     return (Null, LtType t)
 
 rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
+    inClass <- asks curCl
+    case inClass of
+        Just s -> addVariable "self" (LtType s) p
+        _ -> return ""
     argDecls <- forM argL $ \ (Loc p (LtArg name argT)) -> do
         argId <- addVariable name argT p
         return $ Decl argT argId
@@ -398,16 +415,28 @@ getClEnv clL = do
             return $ Decl argT argN
         put $ M.insert name (Func t argDecls [] (Blck [])) env
 
+rwtClass :: LatteClass -> ReaderT FunEnv MyM Class
+rwtClass (LtClass name super decls funL)= do
+    newFunL <- forM funL $ \lf@(Loc p (LtFun fN _ _ _)) -> do
+        newFun <- evalStateT (rwtFunction lf) (VEnv M.empty [])
+        return (fN, newFun)
+    clMbe <- asks $ (M.lookup name) . classes
+    let Just (Class cS cFs _) = clMbe
+    return $ Class cS cFs (M.fromList newFunL)
+
 rwtProgram :: LatteTree -> MyM Program
 rwtProgram (LtTop lfL lcL) = do
-    fEnv <- execStateT (getFEnv lfL) M.empty
+    fEnvBase <- execStateT (getFEnv lfL) M.empty
+    let fEnv = fEnvBase `M.union` (M.fromList builtinFuncs)
     clEnv <- execStateT (getClEnv lcL) M.empty
-    let fEnvL = M.toList fEnv
-    newFunL <- forM fEnvL $ \(_, (id, ltFun)) -> do
+    let fEnvBaseL = M.toList fEnvBase
+    newFunL <- forM fEnvBaseL $ \(_, (id, ltFun)) -> do
         newFun <- runReaderT
             (evalStateT (rwtFunction ltFun) (VEnv M.empty []))
-            (FunEnv (fEnv `M.union` (M.fromList builtinFuncs)) clEnv)
+            (FunEnv fEnv clEnv Nothing)
         return (id, newFun)
+    newCls <- forM lcL (\lc@(Loc p cl@(LtClass name _ _ _)) ->
+        runReaderT (rwtClass cl) (FunEnv fEnv clEnv (Just name)))
     return $ Prog (M.fromList newFunL) M.empty
     where
         builtinFuncs = map fakeFunction builtins
@@ -421,5 +450,3 @@ rwtProgram (LtTop lfL lcL) = do
                         (Loc (Pos 0 0) (LtBlock [])))))
 
 rewriteProgram lt = evalStateT (rwtProgram lt) 0
-    
-
