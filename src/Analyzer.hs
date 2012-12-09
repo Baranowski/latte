@@ -344,12 +344,6 @@ rwtExpr' (Loc p (LtEApp lval exprL)) = do
 rwtExpr' (Loc p LtEFalse) = return (ConstBool False, LtBool)
 rwtExpr' (Loc p LtETrue) = return (ConstBool True, LtBool)
 rwtExpr' (Loc p (LtEInt i)) = return (ConstInt i, LtInt)
-rwtExpr' (Loc p (LtEId [name])) = do
-    varMbe <- asks ((M.lookup name) . ids . vEnv)
-    (varId, varT) <- case varMbe of {
-        Nothing -> semErr p ("No such variable: " ++ name) ;
-        Just res -> return res }
-    return (EId [varId], varT)
 rwtExpr' (Loc p (LtEId lval)) = do
     (newLval, t) <- lookupVar lval p
     return (EId newLval, t)
