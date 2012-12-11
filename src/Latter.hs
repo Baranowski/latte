@@ -9,8 +9,8 @@ import Parser
 import Analyzer
 import BackendJasmin
 
-compileFile :: String -> String -> IO ()
-compileFile path execPath = do
+compileFile :: String -> IO ()
+compileFile path = do
     readRes <- (try $ readFile path) :: IO (Either IOError String)
     case readRes of
         Left err -> do
@@ -28,7 +28,7 @@ compileFile path execPath = do
                     exitFailure
                 Right full -> do
                     --putStrLn (show full)
-                    compileRes <- compileJasmin full execPath
+                    compileRes <- compileJasmin full path
                     case compileRes of
                         Left err -> do
                             hPutStrLn stderr "ERROR"
@@ -40,9 +40,9 @@ compileFile path execPath = do
 main = do
     args <- getArgs
     case args of
-        [path, execPath] -> compileFile path execPath
+        [path] -> compileFile path
         otherwise -> do
             progName <- getProgName
             hPutStrLn stderr $ "Wrong arguments. Expected:\n"
-                ++ progName ++ " [source file] [class name]"
+                ++ progName ++ " [source file]"
             exitFailure

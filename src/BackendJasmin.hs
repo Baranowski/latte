@@ -5,10 +5,10 @@ import Control.Monad.Writer
 import Control.Monad.Reader
 import Control.Monad.State
 import qualified Data.Map as M
-import Data.List.Utils
+import Data.List.Utils as L
 import System.IO.Temp(openTempFile)
 import System.Directory(getTemporaryDirectory, removeFile)
-import System.IO(hPutStrLn, stdout, hClose)
+import System.IO(hPutStrLn, stdout, hClose, openFile, IOMode(..))
 import System.Cmd(system)
 import System.Exit(ExitCode(..))
 
@@ -265,22 +265,24 @@ limitStackExpr (App _ es) =
         foldl max 1 (map (\(e,n) -> n + (limitStackExpr e)) numbered)
 limitStackExpr _ = 1
 
-invokeJasmin :: [String] -> String -> IO (Either CmpError ())
-invokeJasmin lines className = do
-    tmpDir <- getTemporaryDirectory
-    (tempPath, tempH) <- openTempFile tmpDir $ className ++ ".j"
-    forM_ lines (hPutStrLn tempH)
-    hClose tempH
-    exitCode <- system $ "java -jar " ++ JASMIN_DIR ++ "/jasmin.jar " ++ tempPath ++ " > /dev/null 2> /dev/null"
+invokeJasmin :: [String] -> String -> String -> IO (Either CmpError ())
+invokeJasmin lines path className = do
+    let jasminPath = path ++ "/" ++ className ++ ".j"
+    fileH <- openFile jasminPath WriteMode
+    forM_ lines (hPutStrLn fileH)
+    hClose fileH
+    exitCode <- system $ "java -jar " ++ JASMIN_DIR ++ "/jasmin.jar -d " ++ path ++ " " ++ jasminPath ++ " > /dev/null 2> /dev/null"
     let res = case exitCode of
             ExitFailure i -> Left $ CErr $ "jasmin exited with code: " ++ (show i)
             _ -> Right ()
-    removeFile tempPath
     return res
 
 compileJasmin :: Program -> String -> IO (Either CmpError ())
-compileJasmin prog className = do
+compileJasmin prog path = do
+    let pathL = split "/" path
+    let pathDir = L.join "/" $ reverse $ tail $ reverse pathL
+    let className = head $ split "." $ head $ reverse pathL
     let res = execWriterT (generateProgram prog className)
     case res of
         Left err -> return $ Left err
-        Right lines -> invokeJasmin lines className
+        Right lines -> invokeJasmin lines pathDir className
