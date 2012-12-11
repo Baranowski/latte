@@ -1,9 +1,3 @@
-Program kompiluje się poleceniem:
-    ./latc <scieżka do pliku z kodem źródłowym> <nazwa klasy>
-
-użytkownik musi mieć prawo zapisu w aktualnym katalogu. W tym katalogu zostanie utworzony plik <nazwa klasy>.class, który jest skompilowanym programem. Można go uruchomić standardowo poleceniem:
-    java <nazwa klasy>.class
-
 Wszystkie pliki źródłowe kompilatora znajdują się w podkatalogu src/
 
 W podkatalogu lib/ znajdują się biblioteki, z których korzysta rozwiązanie. Są to:
