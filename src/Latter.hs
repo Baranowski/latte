@@ -27,7 +27,7 @@ compileFile path = do
                     hPutStrLn stderr $ show err
                     exitFailure
                 Right full -> do
-                    res <- compileX86 path
+                    res <- compileX86 full path
                     case res of
                         Left err -> do
                             hPutStrLn stderr $ show err
