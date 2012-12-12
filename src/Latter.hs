@@ -23,15 +23,14 @@ compileFile path = do
                 exitFailure
             Right lt -> case rewriteProgram lt of
                 Left err -> do
-                    putStrLn (show lt)
                     hPutStrLn stderr "ERROR"
                     hPutStrLn stderr $ show err
                     exitFailure
                 Right full -> do
                     res <- compileX86 path
                     case res of
-                        Left (CErr s) -> do
-                            hPutStrLn stderr s
+                        Left err -> do
+                            hPutStrLn stderr $ show err
                             exitFailure
                         Right _ -> do
                             hPutStrLn stderr "OK"
