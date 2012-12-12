@@ -371,13 +371,15 @@ rwtExpr' (Loc p (LtENull t)) = do
     return (Null, LtType t)
 
 rwtFunction f@(Loc p (LtFun name retT argL lblock)) = do
-    inClass <- asks curCl
-    case inClass of
-        Just s -> addVariable "self" (LtType s) p
-        _ -> return ""
-    argDecls <- forM argL $ \ (Loc p (LtArg name argT)) -> do
+    argDecls' <- forM argL $ \ (Loc p (LtArg name argT)) -> do
         argId <- addVariable name argT p
         return $ Decl argT argId
+    inClass <- asks curCl
+    argDecls <- case inClass of
+        Just s -> do
+            addVariable "self" (LtType s) p
+            return $ (Decl (LtType s) "self"):argDecls'
+        _ -> return argDecls'
     (newBlock, localDecls) <- runWriterT $ runReaderT (rwtStmtDecls lblock) retT
     let returns = checkReturn newBlock
     when (not returns && retT /= LtVoid) (semErr p ("Function " ++ name ++ " lacks 'return' statement"))
