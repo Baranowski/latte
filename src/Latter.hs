@@ -7,9 +7,10 @@ import System.IO (hPutStrLn, stderr, stdout)
 
 import Parser
 import Analyzer
+import BackendX86
 
-compileFile :: String -> String -> IO ()
-compileFile path execPath = do
+compileFile :: String -> IO ()
+compileFile path = do
     readRes <- (try $ readFile path) :: IO (Either IOError String)
     case readRes of
         Left err -> do
@@ -27,12 +28,19 @@ compileFile path execPath = do
                     hPutStrLn stderr $ show err
                     exitFailure
                 Right full -> do
-                    putStrLn (show full)
+                    res <- compileX86 path
+                    case res of
+                        Left (CErr s) -> do
+                            hPutStrLn stderr s
+                            exitFailure
+                        Right _ -> do
+                            hPutStrLn stderr "OK"
+                            exitSuccess
 
 main = do
     args <- getArgs
     case args of
-        [path, execPath] -> compileFile path execPath
+        [path] -> compileFile path
         otherwise -> do
             progName <- getProgName
             hPutStrLn stderr $ "Wrong arguments. Expected:\n"
