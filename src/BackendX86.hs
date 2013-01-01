@@ -47,6 +47,7 @@ data ClassInfo = ClassInfo {
     ciMethods :: M.Map String Int,
     ciFieldL :: [Type]
     }
+empyClassInfo = ClassInfo M.empty M.empty []
 
 type BaseMonad = StateT Int (Either CmpError)
 type MainWriter = WriterT AsmProg (ReaderT (M.Map String Class) BaseMonad)
@@ -97,7 +98,8 @@ clName _ = "_nonexistent_"
 
 -- Oblicz adres zmiennej i wrzuc do EAX
 -- Po drodze uzywa (zasmieca) EBX
-computeAddr :: LValue -> LocalRWriter ()
+-- Dziala tylko dla niepustego lval
+computeAddr :: LValue -> LocalRWriter String
 computeAddr lval = do
     let (localV:tl) = lval
     offM <- asks seOffsets
@@ -108,7 +110,7 @@ computeAddr lval = do
     addI $ "leal $" ++ (show off) ++ "(%ebp), " ++ outR
     resolveAddr (clName tp) tl
     where
-        resolveAddr _ [] = return ()
+        resolveAddr t [] = return t
         resolveAddr s lval@(first:tl) = do
             clM <- asks seClasses
             clInfo <- myLookup s clM
@@ -217,11 +219,40 @@ eqToIRelation Neq = Rne
 
 rwtExpr :: Expression -> LocalRWriter ()
 rwtExpr (EId lval) = do
-    --TODO
-    return ()
+    computeAddr lval
+    addI $ "mov   %eax, %ebx"
+    addI $ "mov   (%ebx), %eax"
+rwtExpr (App [fName] es) = do
+    forM_ es addParam
+    addI $ "call  " ++ fName
+    addI $ "add   " ++ (show $ 4 * (length es)) ++ ", %esp"
+    where
+      addParam e = do
+        rwtExpr e
+        addI $ "push  %eax"
 rwtExpr (App lval es) = do
-    --TODO
-    return ()
+    let objLval = reverse $ tail $ reverse lval
+    let methodName = head $ reverse lval
+    clN <- computeAddr objLval
+    -- Wrzuc "self" na stos
+    addI $ "push  %eax"
+    -- Wrzuc pozostale argumenty
+    forM_ es addParam
+    -- Znajdz adres obiektu
+    addI $ "mov   (%esp,$-" ++ (show $ length es) ++ ",4), %ebx"
+    -- Adres v-table
+    addI $ "mov   (%ebx), %ecx"
+    -- Adres metody
+    classes <- asks seClasses
+    clInfo <- myLookup clN classes
+    methodNum <- myLookup methodName (ciMethods clInfo)
+    addI $ "mov   (%ecx," ++ (show methodNum) ++ ",4), %eax"
+    addI $ "call  (%eax)"
+    addI $ "add   " ++ (show $ 4 * ((length es) + 1)) ++ ", %esp"
+    where
+      addParam e = do
+        rwtExpr e
+        addI $ "push  %eax"
 rwtExpr (New s) = do
     --TODO
     return ()
@@ -315,6 +346,36 @@ rwtStmt (SExpr e) = do
 rwtStmt SEmpty = return ()
 rwtStmt Pass = return ()
 
+genClassInfos :: M.Map String Class -> StateT (M.Map String ClassInfo) (Either CmpError) ()
+genClassInfos clM = do
+  forM_ (M.toList clM) tryAddClass
+  acc <- get
+  when ((M.size acc) < (M.size clM)) (genClassInfos clM)
+  where
+    tryAddClass (s, cl) =
+        case super cl of
+            Nothing -> addExtendedClass empyClassInfo s cl
+            Just s -> do
+                acc <- get
+                case (M.lookup s acc) of
+                    Nothing -> return ()
+                    Just base -> addExtendedClass base s cl
+    addExtendedClass baseCI name cl = do
+        let oldFieldN = M.size (ciFields baseCI)
+        -- [(num, (name, type))]
+        let fieldsL = [oldFieldN..] `zip` (M.toList $ fields cl)
+        let newFieldL = (ciFieldL baseCI) ++ (map (snd . snd) fieldsL)
+        let newFields = M.union (ciFields baseCI) $ \
+            M.fromList (map (\(id, (name, t)) -> (name, (id, t))) fieldsL) 
+        let oldMethodN = M.size (ciMethods baseCI) 
+        -- [(num, (name, fun))]
+        let methodsL = [oldMethodN..] `zip` (M.toList $ methods cl)
+        let newMethods = M.union (ciMethods baseCI) $ \
+            M.fromList (map (\(id, (name, _)) -> (name, id)) methodsL)
+        modify $ M.insert name (ClassInfo newFields newMethods newFieldL)
+        
+
+
 rwtFunBody :: (M.Map String Class) -> Function -> LocalWriter ()
 rwtFunBody clM fun@(Func t args decls stmt) = do 
     let argsZ = (reverse args) `zip` (map (*4) [1..])
@@ -323,7 +384,8 @@ rwtFunBody clM fun@(Func t args decls stmt) = do
     let offM = M.fromList $ map (\(Decl vT vId, off) -> (vId, off)) varsZ
     let tM = M.fromList $ map (\(Decl vT vId, _ ) -> (vId, vT)) varsZ
     endLabel <- newLabel
-    let sEnv = StmtEnv clM offM tM endLabel
+    clIM <- lift $ lift $ execStateT (genClassInfos clM) M.empty
+    let sEnv = StmtEnv clIM offM tM endLabel
     addI "pushl  %ebp"
     addI "movl   %esp,  %ebp"
     addI $ "subl   $" ++ (show $ 4 * (length decls)) ++ ",  %esp"
