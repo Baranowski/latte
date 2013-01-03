@@ -3,6 +3,7 @@ module BackendX86(compileX86, CmpError(..)) where
 
 import qualified Data.Map as M
 import System.IO
+import System.Process(system)
 import Data.Monoid
 import Data.List.Utils as LU
 import Control.Monad.Writer
@@ -28,7 +29,7 @@ data AsmProg = AsmProg {
     functions :: [(String, [String])]
     }
 toAsm (AsmProg consts funs) =
-    concat $ (map constToAsm consts) ++ (map funToAsm funs)
+    concat $ [".globl main__\n"] ++ (map constToAsm consts) ++ (map funToAsm funs)
 --TODO escaping
 constToAsm (name, const) = name ++ ":\n    .ascii \"" ++ const ++ "\0\"\n"
 funToAsm (name, body) = name ++ ":\n" ++ (concat (map (++"\n") body))
@@ -415,12 +416,16 @@ compileX86 prog@(Prog funM clM) path = do
             let (sourceDir, sourceFile) = splitPath path
             let asmPath = sourceDir ++ "/" ++ (filenameLatToAsm sourceFile)
             writeCode asmPath asmProg
-            return $ Right ()
+            invokeAsm sourceDir asmPath
     where
         splitPath path =
             let (file:dirL) = reverse (split "/" path)
                 in ((LU.join "/" (reverse dirL)), file)
         filenameLatToAsm fileN = head (split "." fileN) ++ ".s"
+
+invokeAsm dir path = do
+    system $ "gcc -o " ++ dir ++ "/a.out " ++ RUNTIME_PATH ++ " " ++ path
+    return $ Right ()
 
 writeCode path prog = do
     h <- openFile path WriteMode
