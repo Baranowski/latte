@@ -109,7 +109,7 @@ computeAddr lval = do
     tpM <- asks seTypes
     tp <- myLookup localV tpM
     (inR, outR) <- registers lval
-    addI $ "leal $" ++ (show off) ++ "(%ebp), " ++ outR
+    addI $ "leal " ++ (show off) ++ "(%ebp), " ++ outR
     resolveAddr (clName tp) tl
     where
         resolveAddr t [] = return t
@@ -308,10 +308,10 @@ rwtStmt Ret = do
     addI $ "jmp   " ++ endLabel
 rwtStmt (Incr lval) = do
     computeAddr lval
-    addI $ "inc   (%eax)"
+    addI $ "incl   (%eax)"
 rwtStmt (Decr lval) = do
     computeAddr lval
-    addI $ "dec   (%eax)"
+    addI $ "decl   (%eax)"
 rwtStmt (RetExpr e) = do
     rwtExpr e
     endLabel <- asks seEndL
