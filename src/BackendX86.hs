@@ -228,7 +228,7 @@ rwtExpr (EId lval) = do
 rwtExpr (App [fName] es) = do
     forM_ es addParam
     addI $ "call  " ++ fName
-    addI $ "add   " ++ (show $ 4 * (length es)) ++ ", %esp"
+    addI $ "add   $" ++ (show $ 4 * (length es)) ++ ", %esp"
     where
       addParam e = do
         rwtExpr e
