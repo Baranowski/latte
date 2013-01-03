@@ -2,7 +2,9 @@
 module BackendX86(compileX86, CmpError(..)) where
 
 import qualified Data.Map as M
+import System.IO
 import Data.Monoid
+import Data.List.Utils as LU
 import Control.Monad.Writer
 import Control.Monad.Reader
 import Control.Monad.State
@@ -373,7 +375,6 @@ genClassInfos clM = do
         let newMethods = M.union (ciMethods baseCI) $ \
             M.fromList (map (\(id, (name, _)) -> (name, id)) methodsL)
         modify $ M.insert name (ClassInfo newFields newMethods newFieldL)
-        
 
 
 rwtFunBody :: (M.Map String Class) -> Function -> LocalWriter ()
@@ -411,5 +412,17 @@ compileX86 prog@(Prog funM clM) path = do
     case res of
         Left cErr -> return $ Left cErr
         Right asmProg -> do
-            putStrLn $ show asmProg
+            let (sourceDir, sourceFile) = splitPath path
+            let asmPath = sourceDir ++ "/" ++ (filenameLatToAsm sourceFile)
+            writeCode asmPath asmProg
             return $ Right ()
+    where
+        splitPath path =
+            let (file:dirL) = reverse (split "/" path)
+                in ((LU.join "/" (reverse dirL)), file)
+        filenameLatToAsm fileN = head (split "." fileN) ++ ".s"
+
+writeCode path prog = do
+    h <- openFile path WriteMode
+    hPutStr h (toAsm prog)
+    hClose h
