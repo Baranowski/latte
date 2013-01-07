@@ -176,7 +176,7 @@ rwtCond label (Or es) =
     forM_ es (rwtCond label)
 rwtCond label (And es) = do
     notL <- newLabel
-    forM_ es (rwtCond notL)
+    forM_ es (rwtCondNot notL)
     addI $ "jmp   " ++ label
     addL notL
 rwtCond label (Not e) =
