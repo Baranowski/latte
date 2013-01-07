@@ -16,15 +16,25 @@ void error(char *str) {
     fprintf(stderr, "%s\n", str);
 }
 
-int readInt() {
-    int x;
-    scanf("%d\n", &x);
-}
 
+#define STR_BUF_SIZE 100
 char *readString() {
     char *res;
-    scanf("%as\n", &res);
+    int l;
+    res = malloc(STR_BUF_SIZE);
+    fgets(res, STR_BUF_SIZE, stdin);
+    l = strlen(res);
+    res[l-1] = '\0';
     return res;
+}
+
+int readInt() {
+    char *str;
+    int l;
+    str = readString();
+    l = atoi(str);
+    free(str);
+    return l;
 }
 
 int strComp(char *s1, char *s2) {
