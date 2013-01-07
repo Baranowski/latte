@@ -1,3 +1,7 @@
 build/
 *.swp
+*.s
+*.j
+*.class
+*/a.out
 latc
