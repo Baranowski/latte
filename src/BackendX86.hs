@@ -140,9 +140,9 @@ rwtCondNot notL (ConstBool False) =
     addI $ "jmp   " ++ notL
 rwtCondNot notL (ConstBool True) = return ()
 rwtCondNot notL (StrComp Eq e1 e2) =
-    rwtCondNot notL (Not (App ["strComp"] [e1, e2]))
+    rwtCondNot notL (Not (App ["strComp"] [e2, e1]))
 rwtCondNot notL (StrComp Neq e1 e2) =
-    rwtCond notL (App ["strComp"] [e1, e2])
+    rwtCond notL (App ["strComp"] [e2, e1])
 rwtCondNot notL (PntComp rel e1 e2) =
     rwtCondNot notL (IntComp (eqToIRelation rel) e1 e2)
 rwtCondNot notL (BoolComp rel e1 e2) =
@@ -185,9 +185,9 @@ rwtCond label (ConstBool False) = return ()
 rwtCond label (ConstBool True) =
     addI $ "jmp   " ++ label
 rwtCond label (StrComp Eq e1 e2) =
-    rwtCond label (App ["strComp"] [e1, e2])
+    rwtCond label (App ["strComp"] [e2, e1])
 rwtCond label (StrComp Neq e1 e2) =
-    rwtCond label (Not (App ["strComp"] [e1, e2]))
+    rwtCond label (Not (App ["strComp"] [e2, e1]))
 rwtCond label (PntComp rel e1 e2) =
     rwtCond label (IntComp (eqToIRelation rel) e1 e2)
 rwtCond label (BoolComp rel e1 e2) =
@@ -281,7 +281,7 @@ rwtExpr (Neg e) = do
     rwtExpr e
     addI $ "neg   %eax"
 rwtExpr (Concat e1 e2) =
-    rwtExpr (App ["strConcat"] [e1,e2])
+    rwtExpr (App ["strConcat"] [e2,e1])
 rwtExpr (ConstInt i) =
     addI $ "mov  $" ++ (show i) ++ ", %eax"
 rwtExpr (Null) =
@@ -380,7 +380,7 @@ genClassInfos clM = do
 
 rwtFunBody :: (M.Map String Class) -> Function -> LocalWriter ()
 rwtFunBody clM fun@(Func t args decls stmt) = do 
-    let argsZ = (reverse args) `zip` (map (*4) [1..])
+    let argsZ = (reverse args) `zip` (map (*4) [2..])
     let declsZ = decls `zip` (map (*(0-4)) [1..])
     let varsZ = argsZ ++ declsZ
     let offM = M.fromList $ map (\(Decl vT vId, off) -> (vId, off)) varsZ
