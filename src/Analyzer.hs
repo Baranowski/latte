@@ -430,7 +430,10 @@ rwtClass (LtClass name super decls funL)= do
         return (fN, newFun)
     clMbe <- asks $ (M.lookup name) . classes
     let Just (Class cS cFs _) = clMbe
-    return $ Class cS cFs (M.fromList newFunL)
+    let newCS = case cS of
+                    Just s -> Just s
+                    Nothing -> Just "Object"
+    return $ Class newCS cFs (M.fromList newFunL)
 
 rwtProgram :: LatteTree -> MyM Program
 rwtProgram (LtTop lfL lcL) = do
@@ -446,7 +449,7 @@ rwtProgram (LtTop lfL lcL) = do
     newCls <- forM lcL $ \lc@(Loc p cl@(LtClass name _ _ _)) -> do
         newCl <- runReaderT (rwtClass cl) (FunEnv fEnv clEnv (Just name))
         return (name, newCl)
-    return $ Prog (M.fromList newFunL) (M.fromList newCls)
+    return $ Prog (M.fromList newFunL) (M.fromList $ ("Object", object):newCls)
     where
         builtinFuncs = map fakeFunction builtins
         fakeFunction (name, Func fType args _ _) =

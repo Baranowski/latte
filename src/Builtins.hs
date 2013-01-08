@@ -2,6 +2,9 @@ module Builtins where
 
 import AbsCommon
 import Abs2ndStage
+import qualified Data.Map as M
+
+object = Class Nothing (M.fromList [("__vtable__", LtInt)]) M.empty
 
 builtins :: [(String, Function)]
 builtins = [

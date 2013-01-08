@@ -362,38 +362,35 @@ genClassInfos clM = do
   acc <- get
   when ((M.size acc) < (M.size clM)) (genClassInfos clM)
   where
-    tryAddClass (s, cl) =
+    tryAddClass (clN, cl) =
         case super cl of
-            Nothing -> addExtendedClass empyClassInfo s cl
+            Nothing -> addExtendedClass empyClassInfo clN cl
             Just s -> do
                 acc <- get
                 case (M.lookup s acc) of
                     Nothing -> return ()
-                    Just base -> addExtendedClass base s cl
+                    Just base -> addExtendedClass base clN cl
     addExtendedClass baseCI name cl = do
         let oldFieldN = M.size (ciFields baseCI)
         -- [(num, (name, type))]
         let fieldsL = [oldFieldN..] `zip` (M.toList $ fields cl)
         let newFieldL = (ciFieldL baseCI) ++ (map (snd . snd) fieldsL)
-        let newFields = M.union (ciFields baseCI) $ \
-            M.fromList (map (\(id, (name, t)) -> (name, (id, t))) fieldsL) 
+        let newFields = M.union (ciFields baseCI) $ M.fromList (map (\(id, (name, t)) -> (name, (id, t))) fieldsL) 
         let oldMethodN = M.size (ciMethods baseCI) 
         -- [(num, (name, fun))]
         let methodsL = [oldMethodN..] `zip` (M.toList $ methods cl)
-        let newMethods = M.union (ciMethods baseCI) $ \
-            M.fromList (map (\(id, (name, _)) -> (name, id)) methodsL)
+        let newMethods = M.union (ciMethods baseCI) $ M.fromList (map (\(id, (name, _)) -> (name, id)) methodsL)
         modify $ M.insert name (ClassInfo newFields newMethods newFieldL)
 
 
-rwtFunBody :: (M.Map String Class) -> Function -> LocalWriter ()
-rwtFunBody clM fun@(Func t args decls stmt) = do 
+rwtFunBody :: (M.Map String ClassInfo) -> Function -> LocalWriter ()
+rwtFunBody clIM fun@(Func t args decls stmt) = do 
     let argsZ = (reverse args) `zip` (map (*4) [2..])
     let declsZ = decls `zip` (map (*(0-4)) [1..])
     let varsZ = argsZ ++ declsZ
     let offM = M.fromList $ map (\(Decl vT vId, off) -> (vId, off)) varsZ
     let tM = M.fromList $ map (\(Decl vT vId, _ ) -> (vId, vT)) varsZ
     endLabel <- newLabel
-    clIM <- lift $ lift $ execStateT (genClassInfos clM) M.empty
     let sEnv = StmtEnv clIM offM tM endLabel
     addI "pushl  %ebp"
     addI "movl   %esp,  %ebp"
@@ -403,16 +400,17 @@ rwtFunBody clM fun@(Func t args decls stmt) = do
     addI "leave"
     addI "ret"
 
-rwtFunction :: String -> Function -> MainWriter ()
-rwtFunction name fun@(Func t args decls stmt) = do
+rwtFunction :: (M.Map String ClassInfo) -> String -> Function -> MainWriter ()
+rwtFunction clIM name fun@(Func t args decls stmt) = do
     clsM <- ask
-    (body, constants) <- lift $ lift $ execWriterT (rwtFunBody clsM fun)
+    (body, constants) <- lift $ lift $ execWriterT (rwtFunBody clIM fun)
     addFunction name body
     addConstants constants
 
 rewriteProgram :: Program -> MainWriter ()
 rewriteProgram prog@(Prog funM clM) = do
-    forM_ (M.toList funM) (\(name, fun) -> rwtFunction name fun)
+    clIM <- lift $ lift $ lift $ execStateT (genClassInfos clM) M.empty
+    forM_ (M.toList funM) (\(name, fun) -> rwtFunction clIM name fun)
 
 compileX86 :: Program -> String -> IO (Either CmpError ())
 compileX86 prog@(Prog funM clM) path = do
