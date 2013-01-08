@@ -33,7 +33,7 @@ data AsmProg = AsmProg {
 toAsm (AsmProg consts funs cls) =
     concat $ [".globl main__\n"] ++ (map constToAsm consts) ++ (map classToAsm cls ) ++ (map funToAsm funs)
 constToAsm (name, const) = name ++ ":\n    .ascii \"" ++ const ++ "\0\"\n"
-classToAsm (clN, clMethods) = clN ++ "____vtable:\n" ++ (concat (map (\mN -> "    .long " ++ clN ++ "__" ++ mN ++"\n") clMethods))
+classToAsm (clN, clMethods) = clN ++ "____vtable:\n" ++ (concat (map (\mN -> "    .long " ++ mN ++"\n") clMethods))
 funToAsm (name, body) = name ++ ":\n" ++ (concat (map (++"\n") body))
 instance Show AsmProg where
     show a = toAsm a
@@ -51,9 +51,10 @@ addClasses cls = tell $ mempty { progClasses = cls }
 data ClassInfo = ClassInfo {
     ciFields :: M.Map String (Int, Type),
     ciMethods :: M.Map String Int,
-    ciFieldL :: [Type]
+    ciFieldL :: [Type],
+    ciVtable :: [String]
     }
-empyClassInfo = ClassInfo M.empty M.empty []
+empyClassInfo = ClassInfo M.empty M.empty [] []
 
 type BaseMonad = StateT Int (Either CmpError)
 type MainWriter = WriterT AsmProg (ReaderT (M.Map String Class) BaseMonad)
@@ -383,10 +384,20 @@ genClassInfos clM = do
         let newFields = M.union (ciFields baseCI) $ M.fromList (map (\(id, (name, t)) -> (name, (id, t))) fieldsL) 
         let oldMethodN = M.size (ciMethods baseCI) 
         -- [(num, (name, fun))]
-        let methodsL = [oldMethodN..] `zip` (M.toList $ methods cl)
-        let newMethods = M.union (ciMethods baseCI) $ M.fromList (map (\(id, (name, _)) -> (name, id)) methodsL)
-        modify $ M.insert name (ClassInfo newFields newMethods newFieldL)
-
+        let (newVtable, newMethods) = addMethod (map fst (M.toList $ methods cl)) baseCI name (ciVtable baseCI) (ciMethods baseCI)
+        modify $ M.insert name (ClassInfo newFields newMethods newFieldL newVtable)
+        where
+          addMethod [] _ _ accVt accM = (accVt, accM)
+          addMethod (mN:ms) baseCI name accVt accM = do
+            let posMbe = M.lookup mN (ciMethods baseCI)
+            case posMbe of
+              Nothing -> do
+                let newVt = accVt ++ [name ++ "__" ++ mN]
+                let newM = M.insert mN ((length newVt)-1) accM
+                addMethod ms baseCI name newVt newM
+              Just i -> do
+                let newVt = (take i accVt) ++ [name ++ "__" ++ mN] ++ (drop (i+1) accVt)
+                addMethod ms baseCI name newVt accM
 
 rwtFunBody :: (M.Map String ClassInfo) -> Function -> LocalWriter ()
 rwtFunBody clIM fun@(Func t args decls stmt) = do 
@@ -420,9 +431,7 @@ rewriteProgram prog@(Prog funM clM) = do
         forM_ (M.toList (methods cl)) (\(mN, method) ->
             rwtFunction clIM (clN ++ "__" ++ mN) method)
     forM_ (M.toList clIM) $ \(clN, clI) -> do
-        let methodL = M.toList $ ciMethods clI
-        let methodsSorted = sortBy (\(_,a) (_,b) -> compare a b) methodL
-        addClasses [(clN, map fst methodsSorted)]
+        addClasses [(clN, ciVtable clI)]
 
 compileX86 :: Program -> String -> IO (Either CmpError ())
 compileX86 prog@(Prog funM clM) path = do
