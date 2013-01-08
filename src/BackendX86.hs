@@ -244,16 +244,16 @@ rwtExpr (App lval es) = do
     -- Wrzuc pozostale argumenty
     forM_ es addParam
     -- Znajdz adres obiektu
-    addI $ "mov   (%esp,$-" ++ (show $ length es) ++ ",4), %ebx"
+    addI $ "mov   " ++ (show $ 4 * (length es)) ++ "(%esp), %ebx"
     -- Adres v-table
     addI $ "mov   (%ebx), %ecx"
     -- Adres metody
     classes <- asks seClasses
     clInfo <- myLookup clN classes
     methodNum <- myLookup methodName (ciMethods clInfo)
-    addI $ "mov   (%ecx," ++ (show methodNum) ++ ",4), %eax"
-    addI $ "call  (%eax)"
-    addI $ "add   " ++ (show $ 4 * ((length es) + 1)) ++ ", %esp"
+    addI $ "mov   " ++ (show $ methodNum *4) ++ "(%ecx), %eax"
+    addI $ "call  *%eax"
+    addI $ "add   $" ++ (show $ 4 * ((length es) + 1)) ++ ", %esp"
     where
       addParam e = do
         rwtExpr e
