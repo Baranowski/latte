@@ -113,8 +113,7 @@ computeAddr lval = do
     off <- myLookup localV offM
     tpM <- asks seTypes
     tp <- myLookup localV tpM
-    (inR, outR) <- registers lval
-    addI $ "leal " ++ (show off) ++ "(%ebp), " ++ outR
+    addI $ "leal " ++ (show off) ++ "(%ebp), %eax"
     resolveAddr (clName tp) tl
     where
         resolveAddr t [] = return t
@@ -122,15 +121,9 @@ computeAddr lval = do
             clM <- asks seClasses
             clInfo <- myLookup s clM
             (fieldOff, tp) <- myLookup first (ciFields clInfo)
-            (inR, outR) <- registers lval
-            addI $ "movl $" ++ (show fieldOff) ++ "(" ++ inR
-                ++ "), " ++ outR
+            addI $ "movl (%eax), %ebx"
+            addI $ "leal " ++ (show $ 4 * fieldOff) ++ "(%ebx), %eax"
             resolveAddr (clName tp) tl
-        registers l = do
-            let len = (length l)
-            case (len `mod` 2) of
-                1 -> return ("%ebx", "%eax")
-                _ -> return ("%eax", "%ebx")
 
 rwtCondNot notL (And es) =
     forM_ es (rwtCondNot notL)
@@ -242,7 +235,8 @@ rwtExpr (App lval es) = do
     let methodName = head $ reverse lval
     clN <- computeAddr objLval
     -- Wrzuc "self" na stos
-    addI $ "push  %eax"
+    addI $ "mov (%eax), %ebx"
+    addI $ "push %ebx"
     -- Wrzuc pozostale argumenty
     forM_ es addParam
     -- Znajdz adres obiektu
