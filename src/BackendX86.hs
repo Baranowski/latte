@@ -261,8 +261,17 @@ rwtExpr (App lval es) = do
         rwtExpr e
         addI $ "push  %eax"
 rwtExpr (New s) = do
-    --TODO
-    return ()
+    ciM <- asks seClasses
+    cI <- myLookup s ciM
+    addI $ "pushl $" ++ (show $ 4 * (length $ ciFieldL cI))
+    addI $ "call malloc"
+    addI $ "mov %eax, %ebx"
+    forM_ ([0..] `zip` (ciFieldL cI)) setField
+    addI $ "mov %ebx, %eax"
+    where
+      setField (pos, t) = do
+        rwtExpr (defaultValue t)
+        addI $ "mov %eax, " ++ (show $ 4 * pos) ++ "(%ebx)"
 rwtExpr (Arithm op e1 e2) = do
     rwtExpr e1
     addI $ "pushl  %eax"
