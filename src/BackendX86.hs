@@ -5,6 +5,7 @@ import qualified Data.Map as M
 import System.IO
 import System.Process(system)
 import Data.Monoid
+import Data.List
 import Data.List.Utils as LU
 import Control.Monad.Writer
 import Control.Monad.Reader
@@ -26,23 +27,26 @@ instance (MonadTrans t, Errorable m, Monad m) => Errorable (t m) where
 
 data AsmProg = AsmProg {
     constants :: [(String, String) ],
-    functions :: [(String, [String])]
+    functions :: [(String, [String])],
+    progClasses :: [(String, [String])]
     }
-toAsm (AsmProg consts funs) =
-    concat $ [".globl main__\n"] ++ (map constToAsm consts) ++ (map funToAsm funs)
+toAsm (AsmProg consts funs cls) =
+    concat $ [".globl main__\n"] ++ (map constToAsm consts) ++ (map classToAsm cls ) ++ (map funToAsm funs)
 constToAsm (name, const) = name ++ ":\n    .ascii \"" ++ const ++ "\0\"\n"
+classToAsm (clN, clMethods) = clN ++ "____vtable:\n" ++ (concat (map (\mN -> "    .long " ++ clN ++ "__" ++ mN ++"\n") clMethods))
 funToAsm (name, body) = name ++ ":\n" ++ (concat (map (++"\n") body))
 instance Show AsmProg where
     show a = toAsm a
 
 instance Monoid AsmProg where
-    mempty = AsmProg [] []
-    mappend (AsmProg cs1 fs1) (AsmProg cs2 fs2) =
-        (AsmProg (cs1++cs2) (fs1++fs2))
+    mempty = AsmProg [] [] []
+    mappend (AsmProg cs1 fs1 cls1) (AsmProg cs2 fs2 cls2) =
+        (AsmProg (cs1++cs2) (fs1++fs2) (cls1++cls2))
 
 addFunction :: String -> [String] -> MainWriter ()
 addFunction name body = tell $ mempty { functions = [(name, body)] }
 addConstants consts = tell $ mempty { constants = consts }
+addClasses cls = tell $ mempty { progClasses = cls }
 
 data ClassInfo = ClassInfo {
     ciFields :: M.Map String (Int, Type),
@@ -261,6 +265,7 @@ rwtExpr (New s) = do
     addI $ "call malloc"
     addI $ "mov %eax, %ebx"
     forM_ ([0..] `zip` (ciFieldL cI)) setField
+    addI $ "movl $" ++ s ++ "____vtable, (%ebx)"
     addI $ "mov %ebx, %eax"
     where
       setField (pos, t) = do
@@ -411,6 +416,13 @@ rewriteProgram :: Program -> MainWriter ()
 rewriteProgram prog@(Prog funM clM) = do
     clIM <- lift $ lift $ lift $ execStateT (genClassInfos clM) M.empty
     forM_ (M.toList funM) (\(name, fun) -> rwtFunction clIM name fun)
+    forM_ (M.toList clM) $ \(clN, cl) -> do
+        forM_ (M.toList (methods cl)) (\(mN, method) ->
+            rwtFunction clIM (clN ++ "__" ++ mN) method)
+    forM_ (M.toList clIM) $ \(clN, clI) -> do
+        let methodL = M.toList $ ciMethods clI
+        let methodsSorted = sortBy (\(_,a) (_,b) -> compare a b) methodL
+        addClasses [(clN, map fst methodsSorted)]
 
 compileX86 :: Program -> String -> IO (Either CmpError ())
 compileX86 prog@(Prog funM clM) path = do
