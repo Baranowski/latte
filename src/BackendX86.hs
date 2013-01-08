@@ -30,7 +30,6 @@ data AsmProg = AsmProg {
     }
 toAsm (AsmProg consts funs) =
     concat $ [".globl main__\n"] ++ (map constToAsm consts) ++ (map funToAsm funs)
---TODO escaping
 constToAsm (name, const) = name ++ ":\n    .ascii \"" ++ const ++ "\0\"\n"
 funToAsm (name, body) = name ++ ":\n" ++ (concat (map (++"\n") body))
 instance Show AsmProg where
@@ -85,7 +84,6 @@ addI s = tell (["    " ++ s], [])
 addL s = tell (["  " ++ s ++ ":"], [])
 addC n s = tell ([], [(n, constEscape s)])
 
---TODO
 constEscape s = s
 
 -- Only when we know for sure that the key exists in map
@@ -98,6 +96,12 @@ myLookup k mp = do
 clName :: Type -> String
 clName (LtType s) = s
 clName _ = "_nonexistent_"
+
+defaultValue :: Type -> Expression
+defaultValue LtBool = ConstBool False
+defaultValue LtInt = ConstInt 0
+defaultValue LtString = ConstStr ""
+defaultValue (LtType s) = Null
 
 -- Oblicz adres zmiennej i wrzuc do EAX
 -- Po drodze uzywa (zasmieca) EBX
