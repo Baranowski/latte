@@ -337,7 +337,7 @@ rwtExpr' (Loc p (LtEApp lval exprL)) = do
     when ((length args) /= (length exprL)) (semErr p ("Too many or too few arguments passed to method" ++ mName))
     let zipL = exprL `zip` args
     newEL <- forM zipL (\(lexpr, Decl argT _) -> rwtExprTyped' argT lexpr)
-    return (App newLval newEL, fT)
+    return (App (newLval++[mName]) newEL, fT)
     where
       lookupMethod mN cl = do
         let mMbe = M.lookup mN (methods cl)
