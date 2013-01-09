@@ -13,6 +13,7 @@ import Control.Monad.State
 
 import AbsCommon
 import Abs2ndStage
+import Builtins
 
 data CmpError = CErr String
 instance Show CmpError where
@@ -51,10 +52,11 @@ addClasses cls = tell $ mempty { progClasses = cls }
 data ClassInfo = ClassInfo {
     ciFields :: M.Map String (Int, Type),
     ciMethods :: M.Map String Int,
+    ciMTypes :: M.Map String Type,
     ciFieldL :: [Type],
     ciVtable :: [String]
     }
-empyClassInfo = ClassInfo M.empty M.empty [] []
+empyClassInfo = ClassInfo M.empty M.empty M.empty [] []
 
 type BaseMonad = StateT Int (Either CmpError)
 type MainWriter = WriterT AsmProg (ReaderT (M.Map String Class) BaseMonad)
@@ -63,6 +65,7 @@ data StmtEnv = StmtEnv {
     seClasses :: M.Map String ClassInfo,
     seOffsets :: M.Map String Int,
     seTypes :: M.Map String Type,
+    seMthTypes :: M.Map String Type,
     seEndL :: String
     }
 
@@ -111,7 +114,7 @@ defaultValue (LtType s) = Null
 -- Oblicz adres zmiennej i wrzuc do EAX
 -- Po drodze uzywa (zasmieca) EBX
 -- Dziala tylko dla niepustego lval
-computeAddr :: LValue -> LocalRWriter String
+computeAddr :: LValue -> LocalRWriter Type
 computeAddr lval = do
     let (localV:tl) = lval
     offM <- asks seOffsets
@@ -119,16 +122,16 @@ computeAddr lval = do
     tpM <- asks seTypes
     tp <- myLookup localV tpM
     addI $ "leal " ++ (show off) ++ "(%ebp), %eax"
-    resolveAddr (clName tp) tl
+    resolveAddr tp tl
     where
         resolveAddr t [] = return t
-        resolveAddr s lval@(first:tl) = do
+        resolveAddr t lval@(first:tl) = do
             clM <- asks seClasses
-            clInfo <- myLookup s clM
+            clInfo <- myLookup (clName t) clM
             (fieldOff, tp) <- myLookup first (ciFields clInfo)
             addI $ "movl (%eax), %ebx"
             addI $ "leal " ++ (show $ 4 * fieldOff) ++ "(%ebx), %eax"
-            resolveAddr (clName tp) tl
+            resolveAddr tp tl
 
 rwtCondNot notL (And es) =
     forM_ es (rwtCondNot notL)
@@ -222,15 +225,19 @@ rwtCond _ e = do
 eqToIRelation Eq = Req
 eqToIRelation Neq = Rne
 
-rwtExpr :: Expression -> LocalRWriter ()
+rwtExpr :: Expression -> LocalRWriter Type
 rwtExpr (EId lval) = do
-    computeAddr lval
+    t <- computeAddr lval
     addI $ "mov   %eax, %ebx"
     addI $ "mov   (%ebx), %eax"
+    return t
 rwtExpr (App [fName] es) = do
     forM_ es addParam
     addI $ "call  " ++ fName
     addI $ "add   $" ++ (show $ 4 * (length es)) ++ ", %esp"
+    mTypes <- asks seMthTypes
+    funcType <- myLookup fName mTypes
+    return funcType
     where
       addParam e = do
         rwtExpr e
@@ -238,7 +245,8 @@ rwtExpr (App [fName] es) = do
 rwtExpr (App lval es) = do
     let objLval = reverse $ tail $ reverse lval
     let methodName = head $ reverse lval
-    clN <- computeAddr objLval
+    cl <- computeAddr objLval
+    let clN = clName cl
     -- Wrzuc "self" na stos
     addI $ "mov (%eax), %ebx"
     addI $ "push %ebx"
@@ -252,9 +260,11 @@ rwtExpr (App lval es) = do
     classes <- asks seClasses
     clInfo <- myLookup clN classes
     methodNum <- myLookup methodName (ciMethods clInfo)
+    methodType <- myLookup methodName (ciMTypes clInfo)
     addI $ "mov   " ++ (show $ methodNum *4) ++ "(%ecx), %eax"
     addI $ "call  *%eax"
     addI $ "add   $" ++ (show $ 4 * ((length es) + 1)) ++ ", %esp"
+    return methodType
     where
       addParam e = do
         rwtExpr e
@@ -268,6 +278,7 @@ rwtExpr (New s) = do
     forM_ ([0..] `zip` (ciFieldL cI)) setField
     addI $ "movl $" ++ s ++ "____vtable, (%ebx)"
     addI $ "mov %ebx, %eax"
+    return $ LtType s
     where
       setField (pos, t) = do
         rwtExpr (defaultValue t)
@@ -290,19 +301,24 @@ rwtExpr (Arithm op e1 e2) = do
                 addI $ "idiv  %ebx"
                 addI $ "mov   %edx, %eax"
       _ -> cErr $ "Unsupported arithmetic operation: " ++ [op]
+    return LtInt
 rwtExpr (Neg e) = do
     rwtExpr e
     addI $ "neg   %eax"
+    return LtBool
 rwtExpr (Concat e1 e2) =
     rwtExpr (App ["strConcat"] [e2,e1])
-rwtExpr (ConstInt i) =
+rwtExpr (ConstInt i) = do
     addI $ "mov  $" ++ (show i) ++ ", %eax"
-rwtExpr (Null) =
+    return LtInt
+rwtExpr (Null) = do
     rwtExpr (ConstInt 0)
+    return $ LtType "*"
 rwtExpr (ConstStr s) = do
     cN <- newConst
     addC cN s
     addI $ "mov $" ++ cN ++ ", %eax"
+    return LtString
 -- Logical expressions - treat them like statement:
 -- if not expr then %eax := 0 else %eax = 1
 rwtExpr e = do
@@ -314,6 +330,7 @@ rwtExpr e = do
     addL trueL
     addI $ "mov   $1,  %eax"
     addL finalL
+    return LtBool
 
 rwtStmt :: Statement -> LocalRWriter ()
 rwtStmt (Blck stmts) = forM_ stmts rwtStmt
@@ -359,6 +376,7 @@ rwtStmt (While e s) = do
     addL whileEndL
 rwtStmt (SExpr e) = do
     rwtExpr e
+    return ()
 rwtStmt SEmpty = return ()
 rwtStmt Pass = return ()
 
@@ -385,7 +403,8 @@ genClassInfos clM = do
         let oldMethodN = M.size (ciMethods baseCI) 
         -- [(num, (name, fun))]
         let (newVtable, newMethods) = addMethod (map fst (M.toList $ methods cl)) baseCI name (ciVtable baseCI) (ciMethods baseCI)
-        modify $ M.insert name (ClassInfo newFields newMethods newFieldL newVtable)
+        let newMTypes = M.union (ciMTypes baseCI) ( M.fromList $ map (\(name, Func t _ _ _) -> (name, t)) (M.toList $ methods cl))
+        modify $ M.insert name (ClassInfo newFields newMethods newMTypes newFieldL newVtable)
         where
           addMethod [] _ _ accVt accM = (accVt, accM)
           addMethod (mN:ms) baseCI name accVt accM = do
@@ -399,15 +418,15 @@ genClassInfos clM = do
                 let newVt = (take i accVt) ++ [name ++ "__" ++ mN] ++ (drop (i+1) accVt)
                 addMethod ms baseCI name newVt accM
 
-rwtFunBody :: (M.Map String ClassInfo) -> Function -> LocalWriter ()
-rwtFunBody clIM fun@(Func t args decls stmt) = do 
+rwtFunBody :: (M.Map String ClassInfo) -> (M.Map String Type) -> Function -> LocalWriter ()
+rwtFunBody clIM mthTypes fun@(Func t args decls stmt) = do 
     let argsZ = (reverse args) `zip` (map (*4) [2..])
     let declsZ = decls `zip` (map (*(0-4)) [1..])
     let varsZ = argsZ ++ declsZ
     let offM = M.fromList $ map (\(Decl vT vId, off) -> (vId, off)) varsZ
     let tM = M.fromList $ map (\(Decl vT vId, _ ) -> (vId, vT)) varsZ
     endLabel <- newLabel
-    let sEnv = StmtEnv clIM offM tM endLabel
+    let sEnv = StmtEnv clIM offM tM mthTypes endLabel
     addI "pushl  %ebp"
     addI "movl   %esp,  %ebp"
     addI $ "subl   $" ++ (show $ 4 * (length decls)) ++ ",  %esp"
@@ -416,20 +435,21 @@ rwtFunBody clIM fun@(Func t args decls stmt) = do
     addI "leave"
     addI "ret"
 
-rwtFunction :: (M.Map String ClassInfo) -> String -> Function -> MainWriter ()
-rwtFunction clIM name fun@(Func t args decls stmt) = do
+rwtFunction :: (M.Map String ClassInfo) -> (M.Map String Type) -> String -> Function -> MainWriter ()
+rwtFunction clIM mthTypes name fun@(Func t args decls stmt) = do
     clsM <- ask
-    (body, constants) <- lift $ lift $ execWriterT (rwtFunBody clIM fun)
+    (body, constants) <- lift $ lift $ execWriterT (rwtFunBody clIM mthTypes fun)
     addFunction name body
     addConstants constants
 
 rewriteProgram :: Program -> MainWriter ()
 rewriteProgram prog@(Prog funM clM) = do
     clIM <- lift $ lift $ lift $ execStateT (genClassInfos clM) M.empty
-    forM_ (M.toList funM) (\(name, fun) -> rwtFunction clIM name fun)
+    let mthTypes = M.fromList $ map (\(name, Func t _ _ _) -> (name, t)) (builtins ++ (M.toList funM))
+    forM_ (M.toList funM) (\(name, fun) -> rwtFunction clIM mthTypes name fun)
     forM_ (M.toList clM) $ \(clN, cl) -> do
         forM_ (M.toList (methods cl)) (\(mN, method) ->
-            rwtFunction clIM (clN ++ "__" ++ mN) method)
+            rwtFunction clIM mthTypes (clN ++ "__" ++ mN) method)
     forM_ (M.toList clIM) $ \(clN, clI) -> do
         addClasses [(clN, ciVtable clI)]
 
