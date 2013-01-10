@@ -356,11 +356,13 @@ rwtStmt (Ass lval e) = do
     addI $ "mov   %eax, %ecx"
     t <- computeAddr lval
     when (t==LtString) $ do
+        addI $ "pushl %ecx"
         addI $ "pushl %eax"
         addI $ "pushl (%eax)"
         addI $ "call __strUnref"
         addI $ "addl $4, %esp"
         addI $ "popl %eax"
+        addI $ "popl %ecx"
     addI $ "mov   %ecx, (%eax)"
 rwtStmt (IfElse e sIf sElse) = do
     elseL <- newLabel
