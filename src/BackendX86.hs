@@ -33,7 +33,7 @@ data AsmProg = AsmProg {
     }
 toAsm (AsmProg consts funs cls) =
     concat $ [".globl main__\n"] ++ (map constToAsm consts) ++ (map classToAsm cls ) ++ (map funToAsm funs)
-constToAsm (name, const) = name ++ ":\n    .ascii \"" ++ const ++ "\0\"\n"
+constToAsm (name, const) = name ++ "_str:\n    .ascii \"" ++ const ++ "\0\"\n    .align 4\n" ++ name ++ ":\n    .long 0xFFFFFFFF\n    .long " ++ name ++ "_str\n"
 classToAsm (clN, clMethods) = clN ++ "____vtable:\n" ++ (concat (map (\mN -> "    .long " ++ mN ++"\n") clMethods))
 funToAsm (name, body) = name ++ ":\n" ++ (concat (map (++"\n") body))
 instance Show AsmProg where
@@ -230,6 +230,10 @@ rwtExpr (EId lval) = do
     t <- computeAddr lval
     addI $ "mov   %eax, %ebx"
     addI $ "mov   (%ebx), %eax"
+    when (t==LtString) $ do
+        addI $ "push %eax"
+        addI $ "call __strRef"
+        addI $ "pop %eax"
     return t
 rwtExpr (App [fName] es) = do
     forM_ es addParam
@@ -260,10 +264,10 @@ rwtExpr (App lval es) = do
     classes <- asks seClasses
     clInfo <- myLookup clN classes
     methodNum <- myLookup methodName (ciMethods clInfo)
-    methodType <- myLookup methodName (ciMTypes clInfo)
     addI $ "mov   " ++ (show $ methodNum *4) ++ "(%ecx), %eax"
     addI $ "call  *%eax"
     addI $ "add   $" ++ (show $ 4 * ((length es) + 1)) ++ ", %esp"
+    methodType <- myLookup methodName (ciMTypes clInfo)
     return methodType
     where
       addParam e = do
@@ -350,7 +354,13 @@ rwtStmt (RetExpr e) = do
 rwtStmt (Ass lval e) = do
     rwtExpr e
     addI $ "mov   %eax, %ecx"
-    computeAddr lval
+    t <- computeAddr lval
+    when (t==LtString) $ do
+        addI $ "pushl %eax"
+        addI $ "pushl (%eax)"
+        addI $ "call __strUnref"
+        addI $ "addl $4, %esp"
+        addI $ "popl %eax"
     addI $ "mov   %ecx, (%eax)"
 rwtStmt (IfElse e sIf sElse) = do
     elseL <- newLabel
@@ -375,8 +385,11 @@ rwtStmt (While e s) = do
     addI $ "jmp   " ++ whileL
     addL whileEndL
 rwtStmt (SExpr e) = do
-    rwtExpr e
-    return ()
+    t <- rwtExpr e
+    when (t==LtString) $ do
+        addI $ "push %eax"
+        addI $ "call __strUnref"
+        addI $ "pop %eax"
 rwtStmt SEmpty = return ()
 rwtStmt Pass = return ()
 
@@ -429,9 +442,18 @@ rwtFunBody clIM mthTypes fun@(Func t args decls stmt) = do
     let sEnv = StmtEnv clIM offM tM mthTypes endLabel
     addI "pushl  %ebp"
     addI "movl   %esp,  %ebp"
-    addI $ "subl   $" ++ (show $ 4 * (length decls)) ++ ",  %esp"
+    --addI $ "subl   $" ++ (show $ 4 * (length decls)) ++ ",  %esp"
+    forM_ declsZ (\_ -> addI $ "pushl $0")
     runReaderT (rwtStmt stmt) sEnv
     addL endLabel
+    addI $ "push %eax"
+    forM_ (argsZ++declsZ) $ \(Decl t _, off) -> when (t == LtString) $ do
+        addI $ "movl " ++ (show off)  ++ "(%ebp), %eax"
+        addI $ "push %eax"
+        addI $ "call __strUnref"
+        addI $ "pop %eax"
+    addI $ "pop %eax"
+    addI $ "addl $" ++ (show $ 4 * (length decls)) ++ ", %esp"
     addI "leave"
     addI "ret"
 
