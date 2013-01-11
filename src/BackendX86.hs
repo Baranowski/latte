@@ -353,17 +353,15 @@ rwtStmt (RetExpr e) = do
     addI $ "jmp   " ++ endLabel
 rwtStmt (Ass lval e) = do
     rwtExpr e
-    addI $ "mov   %eax, %ecx"
+    addI $ "pushl %eax"
     t <- computeAddr lval
     when (t==LtString) $ do
-        addI $ "pushl %ecx"
         addI $ "pushl %eax"
         addI $ "pushl (%eax)"
         addI $ "call __strUnref"
         addI $ "addl $4, %esp"
         addI $ "popl %eax"
-        addI $ "popl %ecx"
-    addI $ "mov   %ecx, (%eax)"
+    addI $ "popl (%eax)"
 rwtStmt (IfElse e sIf sElse) = do
     elseL <- newLabel
     fiL <- newLabel
@@ -444,16 +442,16 @@ rwtFunBody clIM mthTypes fun@(Func t args decls stmt) = do
     let sEnv = StmtEnv clIM offM tM mthTypes endLabel
     addI "pushl  %ebp"
     addI "movl   %esp,  %ebp"
-    --addI $ "subl   $" ++ (show $ 4 * (length decls)) ++ ",  %esp"
-    forM_ declsZ (\_ -> addI $ "pushl $0")
+    addI $ "subl   $" ++ (show $ 4 * (length decls)) ++ ",  %esp"
+    forM_ declsZ  $ \(Decl t _, off) -> when (t==LtString) $ do
+        addI $ "movl $0, " ++ (show off) ++ "(%ebp)"
     runReaderT (rwtStmt stmt) sEnv
     addL endLabel
     addI $ "push %eax"
     forM_ (argsZ++declsZ) $ \(Decl t _, off) -> when (t == LtString) $ do
-        addI $ "movl " ++ (show off)  ++ "(%ebp), %eax"
-        addI $ "push %eax"
+        addI $ "pushl " ++ (show off)  ++ "(%ebp)"
         addI $ "call __strUnref"
-        addI $ "pop %eax"
+        addI $ "addl $4, %esp"
     addI $ "pop %eax"
     addI $ "addl $" ++ (show $ 4 * (length decls)) ++ ", %esp"
     addI "leave"
