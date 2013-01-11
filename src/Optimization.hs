@@ -48,6 +48,13 @@ addL :: String -> Strategy ()
 addL l = tell ["  " ++ l ++ ":"]
 addI i = tell ["    " ++ i]
 
+pushPop =  do -- "push %xxx; pop %yyy
+    (i1, arg1) <- getInstr1
+    (i2, arg2) <- getInstr1
+    assert $ (take 4 i1) == "push"
+    assert $ (take 3 i2) == "pop"
+    assert $ (head arg1) `elem` "%$" || (head arg2) == '%'
+    when (arg1 /= arg2) $ addI $ "movl " ++ arg1 ++ ", " ++ arg2
 strategies = [
       do  -- Skok do nastepnej instrukcji
         label <- isJump
@@ -64,12 +71,7 @@ strategies = [
         assert $ arg0 == "$0"
         let ipref = take 3 i
         assert $ ipref == "add" || ipref == "sub"
-    , do -- "push %xxx; pop %yyy
-        (i1, arg1) <- getInstr1
-        (i2, arg2) <- getInstr1
-        assert $ (take 4 i1) == "push"
-        assert $ (take 3 i2) == "pop"
-        when (arg1 /= arg2) $ addI $ "mov " ++ arg1 ++ ", " ++ arg2
+    , pushPop
     , do -- mov a, b; push b
         (i1, arg10, arg11) <- getInstr2
         assert $ (take 3 i1) == "mov"
@@ -98,6 +100,17 @@ strategies = [
         assert $ (take 3 i2) == "mov"
         assert $ "(" ++ arg11 ++ ")" == arg20
         addI $ i2 ++ " " ++ arg10 ++ ", " ++ arg21
+    , do -- mov xxx, aaa; pop bbb; xchg aaa, bbb
+        (i1, arg10, arg11) <- getInstr2
+        assert $ (take 3 i1) == "mov"
+        (i2, arg20) <- getInstr1
+        assert $ (take 3 i2) == "pop"
+        (i3, arg30, arg31) <- getInstr2
+        assert $ i3 == "xchg"
+        assert $ arg30 == arg11 && arg31 == arg20
+        addI $ i1 ++ " " ++ arg10 ++ ", " ++ arg20
+        addI $ i2 ++ " " ++ arg11
+    , pushPop
     , assert False ]
 
 scroll :: [String] -> [String] -> Strategy () -> [String]
