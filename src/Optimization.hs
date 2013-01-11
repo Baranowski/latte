@@ -51,8 +51,14 @@ addI i = tell ["    " ++ i]
 strategies = [
       do  -- Skok do nastepnej instrukcji
         label <- isJump
-        isLabel label
-        addL label
+        s1 <- getLn
+        assert $ (take 3 s1) /= "   "
+        if (s1 == "  " ++ label ++ ":")
+            then addL label
+            else do
+                isLabel label
+                tell [s1]
+                addL label
     , do -- Dodawanie lub odejmowanie $0
         (i, arg0, arg1) <- getInstr2
         assert $ arg0 == "$0"
