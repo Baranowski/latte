@@ -3,6 +3,8 @@ module Optimization(optimize) where
 import Control.Monad.State
 import Control.Monad.Writer
 
+import Data.List.Utils
+
 type Strategy = StateT [String] (WriterT [String] Maybe)
 
 assert :: Bool -> Strategy ()
@@ -111,6 +113,18 @@ strategies = [
         addI $ i1 ++ " " ++ arg10 ++ ", " ++ arg20
         addI $ i2 ++ " " ++ arg11
     , pushPop
+    , do -- push xxx; mov yyy, zzz; pop aaa
+        assert False
+        (i1, arg10) <- getInstr1
+        assert $ (take 4 i1) == "push"
+        (i2, arg20, arg21) <- getInstr2
+        assert $ (take 3 i2) == "mov"
+        (i3, arg30) <- getInstr1
+        assert $ (take 3 i3) == "pop"
+        assert $ (subIndex arg30 arg20) == Nothing && (subIndex arg30 arg21) == Nothing && (subIndex arg30 arg10) == Nothing
+        assert $ (head arg10) `elem` "$%" || (head arg30) == '%'
+        addI $ "movl " ++ arg10 ++ ", " ++ arg30
+        addI $ i2 ++ " " ++ arg20 ++ ", " ++ arg21
     , assert False ]
 
 scroll :: [String] -> [String] -> Strategy () -> [String]
