@@ -23,6 +23,16 @@ getInstr1 = do
     let instr = takeWhile (/=' ') s2
     let s3 = dropWhile (==' ') (dropWhile (/=' ') s2)
     return (instr, s3)
+getInstr2 :: Strategy (String, String, String)
+getInstr2 = do
+    s <- getLn
+    assert $ (take 4 s) == "    "
+    let s2 = drop 4 s
+    let instr = takeWhile (/=' ') s2
+    let s3 = dropWhile (==' ') (dropWhile (/=' ') s2)
+    let arg0 = takeWhile (/=',') s3
+    let s4 = dropWhile (==' ') $ drop 1 $ dropWhile (/=',') s3
+    return (instr, arg0, s4)
 
 isJump :: Strategy String
 isJump = do
@@ -38,10 +48,16 @@ addL :: String -> Strategy ()
 addL l = tell ["  " ++ l ++ ":"]
 
 strategies = [
-    do  -- Skok do nastepnej instrukcji
+      do  -- Skok do nastepnej instrukcji
         label <- isJump
         isLabel label
-        addL label]
+        addL label
+    , do -- Dodawanie lub odejmowanie $0
+        (i, arg0, arg1) <- getInstr2
+        assert $ arg0 == "$0"
+        let ipref = take 3 i
+        assert $ ipref == "add" || ipref == "sub"
+    , assert False ]
 
 scroll :: [String] -> [String] -> Strategy () -> [String]
 scroll [] acc _ = reverse acc
