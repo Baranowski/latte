@@ -64,6 +64,13 @@ strategies = [
         assert $ (take 4 i1) == "push"
         assert $ (take 3 i2) == "pop"
         when (arg1 /= arg2) $ addI $ "mov " ++ arg1 ++ ", " ++ arg2
+    , do -- mov a, b; push b
+        (i1, arg10, arg11) <- getInstr2
+        assert $ (take 3 i1) == "mov"
+        (i2, arg20) <- getInstr1
+        assert $ (take 4 i2) == "push"
+        assert $ arg11 == arg20
+        addI $ i2 ++ " " ++ arg10
     , assert False ]
 
 scroll :: [String] -> [String] -> Strategy () -> [String]
