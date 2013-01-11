@@ -46,6 +46,7 @@ isLabel l = do
     
 addL :: String -> Strategy ()
 addL l = tell ["  " ++ l ++ ":"]
+addI i = tell ["    " ++ i]
 
 strategies = [
       do  -- Skok do nastepnej instrukcji
@@ -57,6 +58,12 @@ strategies = [
         assert $ arg0 == "$0"
         let ipref = take 3 i
         assert $ ipref == "add" || ipref == "sub"
+    , do -- "push %xxx; pop %yyy
+        (i1, arg1) <- getInstr1
+        (i2, arg2) <- getInstr1
+        assert $ (take 4 i1) == "push"
+        assert $ (take 3 i2) == "pop"
+        when (arg1 /= arg2) $ addI $ "mov " ++ arg1 ++ ", " ++ arg2
     , assert False ]
 
 scroll :: [String] -> [String] -> Strategy () -> [String]
