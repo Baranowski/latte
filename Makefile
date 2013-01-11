@@ -1,11 +1,11 @@
 SOURCES = src/*
 
-all: latc
+all: latc_x86
 
-latc: $(SOURCES)
+latc_x86: $(SOURCES)
 	mkdir -p build
 	ghc -cpp -DRUNTIME_PATH=\"$(CURDIR)/lib/runtime.o\" --make src/Latter.hs -isrc/ -ilib/ -ilib/temporary/ -outputdir build -tmpdir build -o latc
 
 clean:
 	rm -rf build/*
-	rm -f latc
+	rm -f latc_x86
