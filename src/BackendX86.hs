@@ -14,6 +14,7 @@ import Control.Monad.State
 import AbsCommon
 import Abs2ndStage
 import Builtins
+import Optimization(optimize)
 
 data CmpError = CErr String
 instance Show CmpError where
@@ -461,7 +462,7 @@ rwtFunction :: (M.Map String ClassInfo) -> (M.Map String Type) -> String -> Func
 rwtFunction clIM mthTypes name fun@(Func t args decls stmt) = do
     clsM <- ask
     (body, constants) <- lift $ lift $ execWriterT (rwtFunBody clIM mthTypes fun)
-    addFunction name body
+    addFunction name (optimize body)
     addConstants constants
 
 rewriteProgram :: Program -> MainWriter ()
