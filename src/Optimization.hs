@@ -84,6 +84,20 @@ strategies = [
         assert $ (take 3 i2) == "mov"
         assert $ arg11 == arg20
         addI $ "leal " ++ arg10 ++ ", " ++ arg21
+    , do -- 'leal xxx, yyy; push/pop (yyy)
+        (i1, arg10, arg11) <- getInstr2
+        assert $ i1 == "leal"
+        (i2, arg20) <- getInstr1
+        assert $ (take 4 i2) == "push" || (take 3 i2) `elem` ["pop", "dec", "inc"]
+        assert $ arg20 == "(" ++ arg11 ++ ")"
+        addI $ i2 ++ " " ++ arg10
+    , do -- 'leal xxx, yyy; mov (yyy), zzz
+        (i1, arg10, arg11) <- getInstr2
+        assert $ i1 == "leal"
+        (i2, arg20, arg21) <- getInstr2
+        assert $ (take 3 i2) == "mov"
+        assert $ "(" ++ arg11 ++ ")" == arg20
+        addI $ i2 ++ " " ++ arg10 ++ ", " ++ arg21
     , assert False ]
 
 scroll :: [String] -> [String] -> Strategy () -> [String]
