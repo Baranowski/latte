@@ -493,7 +493,7 @@ compileX86 prog@(Prog funM clM) path = do
         filenameLatToAsm fileN = head (split "." fileN) ++ ".s"
 
 invokeAsm dir path = do
-    system $ "gcc -o " ++ dir ++ "/a.out " ++ RUNTIME_PATH ++ " " ++ path
+    system $ "gcc -m32 -o " ++ dir ++ "/a.out " ++ RUNTIME_PATH ++ " " ++ path
     return $ Right ()
 
 writeCode path prog = do
