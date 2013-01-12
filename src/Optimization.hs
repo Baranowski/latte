@@ -72,7 +72,7 @@ strategies = [
         assert $ (take 4 i1) == "push"
         assert $ (take 3 i2) == "pop"
         assert $ (head arg1) `elem` "%$" || (head arg2) == '%'
-        assert $ (subIndex arg1 arg2) == Nothing && (subIndex arg2 arg1) == Nothing
+        assert $ ((subIndex arg1 arg2) == Nothing && (subIndex arg2 arg1) == Nothing) || arg1 == arg2
         when (arg1 /= arg2) $ addI $ "movl " ++ arg1 ++ ", " ++ arg2
     , do -- mov a, b; push b
         (i1, arg10, arg11) <- getInstr2
@@ -131,6 +131,15 @@ strategies = [
         assert $ (head arg10) `elem` "$%" || (head arg30) == '%'
         addI $ "movl " ++ arg10 ++ ", " ++ arg30
         addI $ i2 ++ " " ++ arg20 ++ ", " ++ arg21
+    , do -- mov aaa, %xxx; mov %xxx, bbb
+        (i1, argA, argX1) <- getInstr2
+        (i2, argX2, argB) <- getInstr2
+        assert $ (take 3 i1) == "mov"
+        assert $ (take 3 i2) == "mov"
+        assert $ argX1 == argX2
+        assert $ (head argX1) == '%'
+        assert $ (head argA) `elem` "$%" || (head argB) == '%'
+        addI $ "movl " ++ argA ++ ", " ++ argB
     , assert False ]
 
 scroll :: [String] -> [String] -> Strategy () -> [String]
