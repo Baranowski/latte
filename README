@@ -1,17 +1,14 @@
-Program kompiluje się poleceniem:
-    ./latc <scieżka do pliku z kodem źródłowym> <nazwa klasy>
-
-użytkownik musi mieć prawo zapisu w aktualnym katalogu. W tym katalogu zostanie utworzony plik <nazwa klasy>.class, który jest skompilowanym programem. Można go uruchomić standardowo poleceniem:
-    java <nazwa klasy>.class
-
 Wszystkie pliki źródłowe kompilatora znajdują się w podkatalogu src/
 
-W podkatalogu lib/ znajdują się biblioteki, z których korzysta rozwiązanie. Są to:
-    * Program Jasmin
-    * Biblioteka "temporary" do obsługi plików tymczasowych
+W podkatalogu lib/ znajdują się:
     * Moduł Data.List.Utils
+    * Plik runtime.o i jego źródło - runtime.c
 
 Poza tym rozwiązanie korzysta wyłącznie ze standardowych bibliotek Haskella, w tym z biblioteki Parsec.
 
 Podkatalog build/ tworzony przez polecenie make, zawiera wszystkie pliki wygenerowane przy kompilowaniu kompilatora, poza samym plikiem wykonywalnym.
 
+Zaimplementowane rozszerzenia:
+* Klasy z metodami wirtualnymi
+* Odśmiecanie
+* Peephole optimization
